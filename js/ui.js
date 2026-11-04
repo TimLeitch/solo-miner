@@ -77,7 +77,8 @@ SM.UI = (function () {
 
   function affordableAny() {
     const s = St.get();
-    return [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
+    return [...D.SHUTTLE, ...D.MINER, ...D.WING.upgrades, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
+      || (St.wingCost() != null && St.wingCost() <= s.credits)
       || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; });
   }
 
@@ -241,6 +242,16 @@ SM.UI = (function () {
       html += upgradeRow(u1, 'suit', `Credits kept after hull failure: ${Math.round(S.emergencyShare * 100)}%` + (St.upgradeCost('suit') == null ? '' : ` &rarr; <b>${Math.round((D.BASE.emergencyShare + 0.05 * sl) * 100)}%</b>`));
       const fl = St.lvl('fscan');
       html += upgradeRow(u2, 'fscan', `Contract rewards: ${pct(S.contractBonus - 1)}` + (St.upgradeCost('fscan') == null ? '' : ` &rarr; <b>${pct(0.15 * fl)}</b>`));
+      html += `<h3>Spacewalk gear</h3><div class="card small muted">Tap <b>EVA</b> during a sortie to leave the ship on a tether. The hand drill <b>ignores block resistance</b> (great on cobalt, iridium and alloy), and glowing <b>relics</b> can only be picked up on foot. Oxygen refills once you're back aboard; debris and electrical fields drain it.</div>`;
+      const evaEff = {
+        eva: l => `Speed ${Math.round(D.EVA.speed * (1 + 0.15 * (l - 1)))}`,
+        o2: l => `Oxygen ${Math.round(D.EVA.o2 * (1 + 0.25 * (l - 1)))}s`,
+        drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1))).toFixed(1)} dmg/s (ignores resistance)`,
+      };
+      ['eva', 'o2', 'drill'].forEach(id => {
+        const u = D.MINER.find(x => x.id === id), l = St.lvl(id);
+        html += upgradeRow(u, id, evaEff[id](l) + (St.upgradeCost(id) == null ? '' : ` &rarr; <b>${evaEff[id](l + 1)}</b>`));
+      });
       html += `<div class="card small muted">Miner rank (Rank ${St.rank()}) is earned from mining, discoveries and contracts. Rank 3 unlocks a second contract slot; ranks also unlock shuttle paints (see Contracts tab).</div>`;
     } else if (seg === 'weapons') {
       const wp = St.get().weapons;
@@ -265,6 +276,20 @@ SM.UI = (function () {
         </div>`;
       });
     } else {
+      // ----- escort wing -----
+      const wing = St.get().wing, wc = St.wingCost(), canW = wc != null && St.get().credits >= wc;
+      html += `<h3>Escort wing</h3><div class="card">
+        <div class="row"><div><b>Escort drones</b> <span class="small muted">${wing.count}/${D.WING.max} owned</span>
+          <div class="small muted">They fly around you during a sortie, each picks its own block within reach and mines it. They vent heat and resume by themselves. Each one also adds +${Math.round(D.WING.offlineBonus * 100)}% to the drone bay's offline rate.</div></div></div>
+        <div class="wstats" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${Array.from({ length: D.WING.max }, (_, i) => `<span class="chip">${i < wing.count ? '&#9650; Drone ' + (i + 1) : '&#9651; empty'}</span>`).join('')}</div>
+        ${wc == null ? '<span class="tag grey">WING FULL</span>' : `<button class="btn ${canW ? '' : 'ghost'} small-btn" data-wingbuy>Buy drone ${wing.count + 1} - ${fmt(wc)} cr</button>`}
+        <div class="small muted" style="margin-top:8px">Per drone now: ${S.wingDps.toFixed(1)} dmg/s, fires ${S.wingFire.toFixed(1)}s then cools ${D.WING.coolTime}s, reach ${Math.round(S.wingReach)}.</div>
+      </div>`;
+      D.WING.upgrades.forEach(u => {
+        const l = St.lvl(u.id), maxed = St.upgradeCost(u.id) == null;
+        html += upgradeRow(u, u.id, `${u.stat}: ${pct(u.per * (l - 1))}` + (maxed ? '' : ` &rarr; <b>${pct(u.per * l)}</b>`) + ' (all drones)');
+      });
+      html += `<h3>Offline drone bay</h3>`;
       const l = St.lvl('drone');
       const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
       const mult = D.DRONE.regionMult[best];
@@ -277,6 +302,11 @@ SM.UI = (function () {
       </div>`;
     }
     list.innerHTML = html;
+    list.querySelectorAll('[data-wingbuy]').forEach(b => b.addEventListener('click', () => {
+      SM.Audio.unlock();
+      if (St.buyWingDrone()) { SM.Audio.buy(); toast(`Escort drone ${St.get().wing.count} joined your wing`); render(); }
+      else { SM.Audio.deny(); toast('Not enough credits'); }
+    }));
     list.querySelectorAll('[data-wbuy]').forEach(b => b.addEventListener('click', () => {
       SM.Audio.unlock();
       if (St.buyWeapon(b.dataset.wbuy)) { SM.Audio.buy(); toast(St.weaponDef(b.dataset.wbuy).name + ' ready'); render(); }
@@ -382,6 +412,7 @@ SM.UI = (function () {
     const reasons = { return: 'Returned safely', fuel: 'Fuel empty - towed home', time: 'Shift over - autopilot home', hull: 'Hull failure - emergency return', recovered: 'Recovered from an interrupted sortie' };
     const mats = Object.keys(res.byMat).map(m => `<div class="sum"><span>${esc(D.MATERIALS[m].name)} x${res.byMat[m]}</span><span>${fmt(res.byMat[m] * D.MATERIALS[m].value)}</span></div>`).join('') || '<div class="sum muted"><span>No blocks destroyed</span><span>0</span></div>';
     let rows = mats;
+    if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;
     if (res.emergency) rows += `<div class="sum"><span>Emergency loss (kept ${Math.round(res.share * 100)}%)</span><span class="neg">-${fmt(res.raw - res.credits)}</span></div>`;
     (extra.contracts || []).forEach(c => (rows += `<div class="sum"><span>Contract: ${esc(c.title)}</span><span class="pos">+${fmt(c.paid)}</span></div>`));
@@ -443,7 +474,7 @@ SM.UI = (function () {
       ${rg('stickOpacity', 'Control opacity', 0, 1, 0.1)}
       <button class="btn" id="setDone">Done</button>
       <button class="btn ghost" id="setReset" style="color:var(--danger)">Reset all progress</button>
-      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Q weapon, E swap weapon, X buy reload, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
+      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Q weapon, E swap weapon, X buy reload, V spacewalk, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
     document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', () => {
       s[i.dataset.set] = i.checked; St.save(); render(); SM.Sortie.applyLayout();
     }));

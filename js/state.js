@@ -12,6 +12,7 @@ SM.State = (function () {
     D.SHUTTLE.forEach(u => (lv[u.id] = 1));
     D.MINER.forEach(u => (lv[u.id] = 1));
     lv.drone = 1;
+    D.WING.upgrades.forEach(u => (lv[u.id] = 1));
     return {
       v: VERSION,
       credits: 0,
@@ -26,6 +27,7 @@ SM.State = (function () {
       contracts: { offers: [], active: [], refreshedAt: 0, done: 0 },
       paint: 'standard',
       weapons: { owned: {}, equipped: null }, // id -> level
+      wing: { count: 0 },                      // escort drones owned
       tutorial: true,
       lastSeen: Date.now(),
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
@@ -50,6 +52,7 @@ SM.State = (function () {
         s.settings = Object.assign(fresh().settings, parsed.settings || {});
         s.stats = Object.assign(fresh().stats, parsed.stats || {});
         s.contracts = Object.assign(fresh().contracts, parsed.contracts || {});
+        s.wing = Object.assign({ count: 0 }, parsed.wing || {});
         s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
         if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
       }
@@ -89,6 +92,15 @@ SM.State = (function () {
       repairMult: Math.max(0.68, 1 - 0.08 * (lvl('repair') - 1)),
       emergencyShare: D.BASE.emergencyShare + 0.05 * (lvl('suit') - 1),
       contractBonus: 1 + 0.15 * (lvl('fscan') - 1),
+      // escort wing
+      wingDps: D.WING.dps * (1 + 0.30 * (lvl('wlaser') - 1)),
+      wingFire: D.WING.fireTime * (1 + 0.30 * (lvl('wcool') - 1)),
+      wingSpeed: D.WING.speed * (1 + 0.20 * (lvl('wengine') - 1)),
+      wingReach: D.WING.reach * (1 + 0.20 * (lvl('wengine') - 1)),
+      // spacewalk
+      evaSpeed: D.EVA.speed * (1 + 0.15 * (lvl('eva') - 1)),
+      evaO2: D.EVA.o2 * (1 + 0.25 * (lvl('o2') - 1)),
+      drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)),
     };
   }
   function maxHull() { return stats().hull; }
@@ -111,7 +123,7 @@ SM.State = (function () {
 
   // ---------- Purchases ----------
   function upgradeCost(id) {
-    const def = id === 'drone' ? D.DRONE : (D.SHUTTLE.find(x => x.id === id) || D.MINER.find(x => x.id === id));
+    const def = id === 'drone' ? D.DRONE : (D.SHUTTLE.find(x => x.id === id) || D.MINER.find(x => x.id === id) || D.WING.upgrades.find(x => x.id === id));
     const l = lvl(id);
     return l - 1 < def.costs.length ? def.costs[l - 1] : null;
   }
@@ -138,6 +150,17 @@ SM.State = (function () {
     }
     save();
     return c;
+  }
+
+  // ---------- Escort wing ----------
+  function wingCost() { const n = s.wing.count; return n < D.WING.max ? D.WING.buyCosts[n] : null; }
+  function buyWingDrone() {
+    const c = wingCost();
+    if (c == null || s.credits < c) return false;
+    accrue(); // offline rate bonus changes with drone count
+    s.credits -= c; s.wing.count++;
+    save();
+    return true;
   }
 
   // ---------- Weapons ----------
@@ -180,7 +203,7 @@ SM.State = (function () {
   function droneRate() { // credits per hour
     const l = lvl('drone');
     const best = Math.max(0, ...s.unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-    return D.DRONE.ratePerHour[l - 1] * D.DRONE.regionMult[best];
+    return D.DRONE.ratePerHour[l - 1] * D.DRONE.regionMult[best] * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
   }
   function droneCap() { return D.DRONE.capHours[lvl('drone') - 1]; }
   function droneCapCredits() { return droneRate() * droneCap(); }
@@ -302,6 +325,7 @@ SM.State = (function () {
   return {
     load, save, reset, get, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
+    wingCost, buyWingDrone,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,

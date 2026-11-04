@@ -221,3 +221,6 @@ body.in-sortie #hangar { display: none; }
 .reload { pointer-events: auto; position: absolute; top: -18px; left: -10px; min-width: 40px; height: 34px; border-radius: 17px; border: 2px solid var(--gold); background: #2a2000e6; color: var(--gold); font-size: 12px; font-weight: 900; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 5px; opacity: var(--ctl-opacity); }
 .reload small { font-size: 8px; font-weight: 700; }
 .reload.off { border-color: #fff3; color: var(--muted); background: #000c; }
+.hbar.o2 i { background: #b5f0ff; }
+.tgl.eva { border-color: var(--gold); color: var(--gold); }
+.tgl.eva.on { background: #6b5200cc; color: #fff; }

@@ -68,7 +68,7 @@
           <button class="on" data-seg="shuttle">Shuttle</button>
           <button data-seg="miner">Miner</button>
           <button data-seg="weapons">Weapons</button>
-          <button data-seg="drone">Drone</button>
+          <button data-seg="drone">Drones</button>
         </div>
         <div id="upgradeList"></div>
       </section>
@@ -111,6 +111,7 @@
           <div class="hbar fuel"><span>FUEL</span><div><i id="barFuel"></i></div></div>
           <div class="hbar energy"><span>BOOST</span><div><i id="barEnergy"></i></div></div>
           <div class="hbar heat"><span>HEAT</span><div><i id="barHeat"></i></div></div>
+          <div class="hbar o2" id="hbarO2" hidden><span>O2</span><div><i id="barO2"></i></div></div>
         </div>
         <div class="hud-right">
           <div class="hud-credits"><span class="coin">&#9679;</span><b id="hudCredits">0</b></div>
@@ -131,6 +132,7 @@
         <button id="tglFire" class="tgl" aria-pressed="false">FIRE<small>AUTO OFF</small></button>
         <button id="tglBoost" class="tgl" aria-pressed="false">BOOST<small>AUTO OFF</small></button>
         <button id="tglPilot" class="tgl" aria-pressed="false">PILOT<small>AUTO OFF</small></button>
+        <button id="tglEva" class="tgl eva">EVA<small>EXIT SHIP</small></button>
       </div>
       <button id="btnReturn" class="ctl return">RETURN<small>bank credits</small></button>
       <div class="wpn-wrap" id="wpnWrap" hidden>

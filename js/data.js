@@ -56,7 +56,38 @@ SM.DATA = (function () {
     { id: 'repair',  name: 'Repair training', stat: 'Repair cost',        per: -0.08, costs: [150, 400, 900, 2000], unit: '%' },
     { id: 'suit',    name: 'Reinforced suit', stat: 'Emergency payout',   per: 0.05,  costs: [160, 420, 950, 2100], unit: 'pts' },
     { id: 'fscan',   name: 'Field scanner',   stat: 'Contract rewards', per: 0.15,  costs: [140, 380, 850, 1900], unit: '%' },
+    { id: 'eva',     name: 'EVA mobility',    stat: 'Spacewalk speed',  per: 0.15,  costs: [150, 400, 900, 2000], unit: '%' },
+    { id: 'o2',      name: 'Oxygen tank',     stat: 'Spacewalk time',   per: 0.25,  costs: [150, 400, 900, 2000], unit: '%' },
+    { id: 'drill',   name: 'Hand drill',      stat: 'Drill power',      per: 0.30,  costs: [200, 500, 1100, 2400], unit: '%' },
   ];
+
+  // Escort wing: drones that fly around the ship during a sortie and mine on their own.
+  // Buy up to 4; the three wing upgrades apply to every drone you own.
+  const WING = {
+    max: 4,
+    buyCosts: [400, 900, 1800, 3500],
+    dps: 2.5,          // per drone, before block resistance (ship laser is 5)
+    fireTime: 4,       // seconds of fire before a drone vents
+    coolTime: 2,       // seconds to cool
+    speed: 170, reach: 190, // reach = how far from the ship a drone will go to mine
+    offlineBonus: 0.15, // +15% offline drone-bay rate per escort drone owned
+    upgrades: [
+      { id: 'wlaser',  name: 'Drone lasers',     stat: 'Drone mining power', per: 0.30, costs: [250, 600, 1300, 2800], unit: '%' },
+      { id: 'wcool',   name: 'Drone heat sinks', stat: 'Drone fire time',    per: 0.30, costs: [200, 500, 1100, 2400], unit: '%' },
+      { id: 'wengine', name: 'Drone engines',    stat: 'Drone speed & reach', per: 0.20, costs: [200, 500, 1100, 2400], unit: '%' },
+    ],
+  };
+
+  // Spacewalk (EVA): the miner leaves the ship on a tether.
+  const EVA = {
+    o2: 30,           // seconds of oxygen
+    speed: 80,        // movement speed
+    drillDps: 6,      // hand drill damage/s - IGNORES block resistance, so it's great on hard blocks
+    drillRange: 40,
+    tether: 260,      // max distance from the ship
+    debrisO2: 6,      // oxygen lost when debris hits the miner
+    relicsPerField: 4,
+  };
 
   // Offline mining drone (not in the original README - added for offline gains).
   const DRONE = {
@@ -116,5 +147,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA };
 })();

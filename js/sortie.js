@@ -92,10 +92,21 @@ SM.Sortie = (function () {
     for (let i = 0; i < region.fields; i++) {
       fields.push({ x: rand(150, W - 150), y: rand(150, H - 500), r: rand(70, 115), t: rand(0, 6) });
     }
+    // relics: small salvage only the miner can pick up on a spacewalk
+    const relics = [];
+    const tier = D.REGIONS.indexOf(region);
+    for (let i = 0, tries = 0; i < D.EVA.relicsPerField && tries < 200; tries++) {
+      const c = centers[Math.floor(Math.random() * centers.length)];
+      const x = c.x + rand(-200, 200), y = c.y + rand(-200, 200);
+      if (x < 40 || y < 40 || x > W - 40 || y > H - 300) continue;
+      if (grid.has(key(Math.floor(x / BS), Math.floor(y / BS)))) continue;
+      relics.push({ x, y, value: Math.round([60, 140, 240, 380][tier] * rand(0.8, 1.3)), alive: true, t: rand(0, 6) });
+      i++;
+    }
     // stars
     const stars = [];
     for (let i = 0; i < 260; i++) stars.push({ x: rand(0, W), y: rand(0, H), z: rand(0.2, 1), s: rand(0.5, 1.8) });
-    return { blocks, grid, dock, debris, fields, stars };
+    return { blocks, grid, dock, debris, fields, stars, relics };
   }
   function newDebris(region, dock) {
     let x, y;
@@ -139,8 +150,15 @@ SM.Sortie = (function () {
       cam: { x: world.dock.x, y: world.dock.y - 200 },
       warned: {}, tut: st.tutorial ? 0 : -1, ended: false,
       boosting: false,
+      wing: [], eva: false, miner: null, o2: 0, relicCount: 0, relicCredits: 0,
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
     });
+    for (let i = 0; i < st.wing.count; i++) {
+      const ph = i / st.wing.count * Math.PI * 2;
+      w.wing.push({ x: w.ship.x + Math.cos(ph) * 40, y: w.ship.y + Math.sin(ph) * 40, vx: 0, vy: 0, a: 0, phase: ph, target: null, heat: 0, venting: false, firing: false });
+    }
+    w.o2 = S.evaO2;
+    applyEvaUi();
     const wp = st.weapons;
     Object.keys(wp.owned).forEach(id => { if (wp.owned[id]) w.ammo[id] = w.maxAmmo[id] = SM.State.weaponStats(id).ammo; });
     w.weapon = wp.owned[wp.equipped] ? wp.equipped : (Object.keys(w.ammo)[0] || null);
@@ -198,6 +216,7 @@ SM.Sortie = (function () {
     const share = emergency ? Math.min(0.95, w.S.emergencyShare) : 1;
     const result = {
       reason, region: w.region.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
+      relicCount: w.relicCount, relicCredits: w.relicCredits,
       ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
       byMat: w.byMat, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
@@ -275,6 +294,7 @@ SM.Sortie = (function () {
     }
     $('btnWeapon').addEventListener('pointerdown', e => { e.preventDefault(); SM.Audio.unlock(); if (running && !paused) fireWeapon(); });
     $('btnSwap').addEventListener('click', () => { SM.Audio.click(); cycleWeapon(); });
+    $('tglEva').addEventListener('click', () => { SM.Audio.unlock(); SM.Audio.click(); if (running && !paused) toggleEva(); });
     $('btnReload').addEventListener('click', () => { SM.Audio.unlock(); if (running && !paused) buyReload(); });
     hold('btnMine', 'mine');
     hold('btnBoost', 'boost');
@@ -300,6 +320,7 @@ SM.Sortie = (function () {
       if (e.code === 'KeyQ' && !paused) fireWeapon();
       if (e.code === 'KeyE' && !paused) cycleWeapon();
       if (e.code === 'KeyX' && !paused) buyReload();
+      if (e.code === 'KeyV' && !paused) toggleEva();
       if (e.code === 'KeyF') $('tglFire').click();
       if (e.code === 'KeyB') $('tglBoost').click();
       if (e.code === 'KeyG') $('tglPilot').click();
@@ -418,10 +439,14 @@ SM.Sortie = (function () {
     let mag = Math.hypot(mx, my); if (mag > 1) { mx /= mag; my /= mag; mag = 1; }
     if (mag > 0.1 && w.tut === 0 && !w.tutMoved) { w.tutMoved = true; setTimeout(() => tutorialStep(1), 1200); }
 
+    // spacewalk: the stick drives the miner, the ship holds position
+    if (w.eva) { updateEva(dt, mx, my, mag); mx = 0; my = 0; mag = 0; w.apIdle = 0; }
+    else if (w.o2 < S.evaO2) { w.o2 = Math.min(S.evaO2, w.o2 + dt * 2); if (w.o2 >= S.evaO2) applyEvaUi(); } // refills aboard
+
     // autopilot: when the player isn't steering, fly to the next block worth mining
     w.autopilot = false;
     if (mag > 0.1) { w.apIdle = 0; w.apGoal = null; }
-    else if (settings().autopilot && w.tut !== 0) {
+    else if (settings().autopilot && w.tut !== 0 && !w.eva) {
       w.apIdle = (w.apIdle || 0) + dt;
       if (w.apIdle > 0.6) {
         const ap = autopilot(dt);
@@ -466,7 +491,7 @@ SM.Sortie = (function () {
 
     // targeting
     if (w.target && !w.target.alive) w.target = null;
-    const wantFire = input.mine || settings().autoFire;
+    const wantFire = !w.eva && (input.mine || settings().autoFire);
     let inRange = w.target && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range;
     if (wantFire && (!w.target || (!inRange && settings().autoFire)) && settings().aimAssist) {
       const nb = nearestBlock(S.range);
@@ -498,8 +523,10 @@ SM.Sortie = (function () {
       w.heat = Math.max(0, w.heat - S.cool * dt);
       if (w.overheated && w.heat <= S.heat * D.BASE.resumeAt) { w.overheated = false; caption('Laser cooled - mining again', 'good'); }
     }
-    SM.Audio.laser(w.firing);
+    if (!w) return; // the sortie may have ended inside updateEva
+    SM.Audio.laser(w.firing || !!(w.miner && w.miner.drilling) || w.wing.some(d => d.firing));
     updateWeapons(dt);
+    updateWing(dt);
 
     // debris
     w.debris.forEach(d => {
@@ -527,7 +554,8 @@ SM.Sortie = (function () {
     w.shake = Math.max(0, w.shake - dt * 18);
 
     // camera follows ship with lookahead
-    const lx = s.x + s.vx * 0.35, ly = s.y + s.vy * 0.35;
+    const fo = w.eva && w.miner ? w.miner : s;
+    const lx = fo.x + fo.vx * 0.35, ly = fo.y + fo.vy * 0.35;
     w.cam.x += (lx - w.cam.x) * Math.min(1, dt * 4); w.cam.y += (ly - w.cam.y) * Math.min(1, dt * 4);
     const hw = cw / 2 / scale, hh = ch / 2 / scale;
     w.cam.x = Math.max(Math.min(hw, W / 2), Math.min(W - Math.min(hw, W / 2), w.cam.x));
@@ -544,7 +572,8 @@ SM.Sortie = (function () {
     if (w.time <= 0) return end('time');
   }
 
-  function collideBlocks(s) {
+  function collideBlocks(s, R0) {
+    const SR = R0 || SHIP_R;
     const gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
@@ -553,9 +582,9 @@ SM.Sortie = (function () {
       const cx = Math.max(b.x - half, Math.min(s.x, b.x + half));
       const cy = Math.max(b.y - half, Math.min(s.y, b.y + half));
       const ddx = s.x - cx, ddy = s.y - cy, d = Math.hypot(ddx, ddy);
-      if (d < SHIP_R) {
+      if (d < SR) {
         const nx = d ? ddx / d : 0, ny = d ? ddy / d : -1;
-        s.x = cx + nx * SHIP_R; s.y = cy + ny * SHIP_R;
+        s.x = cx + nx * SR; s.y = cy + ny * SR;
         const vn = s.vx * nx + s.vy * ny;
         if (vn < 0) { s.vx -= vn * nx * 1.3; s.vy -= vn * ny * 1.3; } // soft bump, no damage
       }
@@ -571,6 +600,191 @@ SM.Sortie = (function () {
       w.pops.push({ x: w.ship.x, y: w.ship.y - 20, text: '-' + Math.round(amount) + ' hull', t: 0, color: '#ff6b6b', size: 13 });
     } else if (!w.warned.zap || w.elapsed - w.warned.zap > 1.2) {
       w.warned.zap = w.elapsed; SM.Audio.damage(); vibrate(40); caption('Electrical field - taking damage', 'danger');
+    }
+  }
+
+  // ---------- escort wing ----------
+  function updateWing(dt) {
+    const s = w.ship, S = w.S, claimed = new Set();
+    w.wing.forEach(d => { if (d.target && d.target.alive) claimed.add(d.target); });
+    w.wing.forEach(d => {
+      if (d.target && (!d.target.alive || Math.hypot(d.target.x - s.x, d.target.y - s.y) > S.wingReach + 30)) { claimed.delete(d.target); d.target = null; }
+      if (!d.target) { // nearest unclaimed block within reach of the ship
+        let best = null, bd = S.wingReach;
+        for (const b of w.blocks) {
+          if (!b.alive || claimed.has(b)) continue;
+          const dd = Math.hypot(b.x - s.x, b.y - s.y);
+          if (dd < bd) { bd = dd; best = b; }
+        }
+        if (best) { d.target = best; claimed.add(best); }
+      }
+      // where to fly: next to the target, or a slow orbit around the ship
+      let gx, gy;
+      if (d.target) {
+        const a = Math.atan2(d.y - d.target.y, d.x - d.target.x);
+        gx = d.target.x + Math.cos(a) * 38; gy = d.target.y + Math.sin(a) * 38;
+      } else {
+        const a = w.elapsed * 0.9 + d.phase;
+        gx = s.x + Math.cos(a) * 42; gy = s.y + Math.sin(a) * 42;
+      }
+      const dx = gx - d.x, dy = gy - d.y, dist = Math.hypot(dx, dy) || 1;
+      const sp = Math.min(S.wingSpeed, dist * 4);
+      d.vx += (dx / dist * sp - d.vx) * Math.min(1, dt * 6); d.vy += (dy / dist * sp - d.vy) * Math.min(1, dt * 6);
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      const look = d.target || { x: d.x + d.vx, y: d.y + d.vy };
+      d.a = Math.atan2(look.y - d.y, look.x - d.x);
+      // mine + heat (vents at the limit, then resumes by itself like the ship laser)
+      d.firing = false;
+      if (d.venting) { d.heat -= S.wingFire / D.WING.coolTime * dt; if (d.heat <= 0) { d.heat = 0; d.venting = false; } }
+      else if (d.target && Math.hypot(d.target.x - d.x, d.target.y - d.y) < 60) {
+        d.firing = true; d.heat += dt;
+        const t = d.target;
+        hurtBlock(t, S.wingDps * dt, true);
+        if (d.heat >= S.wingFire) d.venting = true;
+        if (!t.alive) d.target = null;
+      } else d.heat = Math.max(0, d.heat - dt);
+    });
+  }
+
+  // ---------- spacewalk (EVA) ----------
+  function toggleEva() {
+    if (!w) return;
+    if (!w.eva) {
+      if (w.o2 < 3) { SM.Audio.deny(); caption('Oxygen still refilling', 'warn'); return; }
+      const s = w.ship;
+      w.eva = true;
+      s.vx *= 0.2; s.vy *= 0.2;
+      w.miner = { x: s.x, y: s.y + 4, vx: 0, vy: 0, a: s.a, drilling: false, target: null, reel: false, inv: 0 };
+      caption('Spacewalk: drill ignores resistance, grab glowing relics', 'good');
+      if (w.tut >= 0) tutorialStep(99);
+    } else if (w.miner) {
+      w.miner.reel = true; // tether pulls the miner home
+      caption('Reeling back to the ship');
+    }
+    applyEvaUi();
+  }
+  function applyEvaUi() {
+    if (!w) return;
+    $('tglEva').classList.toggle('on', w.eva);
+    $('tglEva').querySelector('small').textContent = w.eva ? 'BOARD' : 'EXIT SHIP';
+    $('hbarO2').hidden = !w.eva && w.o2 >= w.S.evaO2;
+  }
+  function updateEva(dt, mx, my, mag) {
+    const m = w.miner, s = w.ship, S = w.S;
+    w.o2 = Math.max(0, w.o2 - dt);
+    if (w.o2 <= 0 && !m.reel) { m.reel = true; caption('Oxygen empty - tether reeling you in', 'danger'); SM.Audio.alarm(); vibrate([80, 60, 80]); }
+    if (w.o2 < 8 && !w.warned.o2) { w.warned.o2 = 1; SM.Audio.alarm(); caption('Oxygen low - head back to the ship', 'warn'); }
+    let tvx, tvy;
+    if (m.reel) {
+      const dx = s.x - m.x, dy = s.y - m.y, d = Math.hypot(dx, dy) || 1;
+      tvx = dx / d * 260; tvy = dy / d * 260;
+      if (d < 16) { // back aboard
+        w.eva = false; w.miner = null; w.warned.o2 = 0;
+        caption('Back aboard', 'good'); applyEvaUi(); return;
+      }
+    } else { tvx = mx * S.evaSpeed; tvy = my * S.evaSpeed; }
+    m.vx += (tvx - m.vx) * Math.min(1, dt * 6); m.vy += (tvy - m.vy) * Math.min(1, dt * 6);
+    m.x += m.vx * dt; m.y += m.vy * dt;
+    if (mag > 0.1) m.a = Math.atan2(my, mx);
+    // tether limit
+    const tx = m.x - s.x, ty = m.y - s.y, td = Math.hypot(tx, ty);
+    if (td > D.EVA.tether) { m.x = s.x + tx / td * D.EVA.tether; m.y = s.y + ty / td * D.EVA.tether; }
+    if (!m.reel) collideBlocks(m, 6);
+    // hand drill: short range, ignores resistance
+    m.drilling = false;
+    if (!m.reel && (input.mine || settings().autoFire)) {
+      if (!m.target || !m.target.alive || Math.hypot(m.target.x - m.x, m.target.y - m.y) > D.EVA.drillRange + BS / 2) {
+        m.target = null; let bd = D.EVA.drillRange + BS / 2;
+        const gx = Math.floor(m.x / BS), gy = Math.floor(m.y / BS);
+        for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
+          const b = w.grid.get(key(gx + dx, gy + dy)); if (!b || !b.alive) continue;
+          const d = Math.hypot(b.x - m.x, b.y - m.y); if (d < bd) { bd = d; m.target = b; }
+        }
+      }
+      if (m.target) {
+        m.drilling = true;
+        const t = m.target;
+        hurtBlock(t, S.drillDps * M[t.mat].res * dt, true); // x res cancels resistance
+        if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: t.x + rand(-5, 5), y: t.y + rand(-5, 5), vx: rand(-50, 50), vy: rand(-50, 50), t: 0, life: 0.3, color: '#ffd76a', size: 2 });
+        if (!t.alive) m.target = null;
+      }
+    }
+    // relics
+    w.relics.forEach(r => {
+      if (r.alive && Math.hypot(r.x - m.x, r.y - m.y) < 18) {
+        r.alive = false; w.relicCount++; w.relicCredits += r.value; w.credits += r.value; w.xp += 10;
+        SM.Audio.contract(); vibrate(50);
+        w.pops.push({ x: r.x, y: r.y - 8, text: '+' + r.value + ' relic', t: 0, color: '#f2c14e', size: 16 });
+        caption(`Relic recovered +${r.value} cr`, 'good');
+      }
+    });
+    // hazards hit the suit (oxygen), not the hull
+    w.debris.forEach(d => {
+      const dist = Math.hypot(d.x - m.x, d.y - m.y);
+      if (dist < d.r + 7 && !(m.inv > 0)) {
+        w.o2 = Math.max(0, w.o2 - D.EVA.debrisO2); m.inv = 1; SM.Audio.damage(); vibrate(60);
+        caption(`Debris hit your suit -${D.EVA.debrisO2}s oxygen`, 'danger');
+        m.vx = (m.x - d.x) / (dist || 1) * 200; m.vy = (m.y - d.y) / (dist || 1) * 200;
+      }
+    });
+    if (m.inv > 0) m.inv -= dt;
+    w.fields.forEach(f => { if (f.phase === 2 && Math.hypot(f.x - m.x, f.y - m.y) < f.r) w.o2 = Math.max(0, w.o2 - 4 * dt); });
+  }
+
+  // draw helpers for the wing, the miner and relics
+  function drawWingAndEva() {
+    const paint = (D.PAINTS.find(p => p.id === SM.State.get().paint) || D.PAINTS[0]).color;
+    const now = performance.now() / 1000;
+    // relics
+    w.relics.forEach(r => {
+      if (!r.alive) return;
+      const pulse = 0.6 + Math.sin(now * 4 + r.t) * 0.4;
+      g.save(); g.translate(r.x, r.y);
+      g.globalAlpha = 0.35 * pulse; g.fillStyle = '#f2c14e';
+      g.beginPath(); g.arc(0, 0, 14, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1; g.fillStyle = '#fff3c4'; g.strokeStyle = '#a07a1c'; g.lineWidth = 1.5;
+      g.rotate(now + r.t);
+      g.beginPath(); g.moveTo(0, -7); g.lineTo(6, 0); g.lineTo(0, 7); g.lineTo(-6, 0); g.closePath(); g.fill(); g.stroke();
+      g.restore();
+      if (Math.hypot(r.x - w.ship.x, r.y - w.ship.y) < w.S.scan * 1.5) {
+        g.fillStyle = '#f2c14e'; g.font = 'bold 9px system-ui'; g.textAlign = 'center'; g.fillText('RELIC', r.x, r.y - 16);
+      }
+    });
+    // escort drones
+    w.wing.forEach(d => {
+      if (d.firing && d.target) {
+        g.strokeStyle = 'rgba(87,227,154,0.5)'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(d.target.x, d.target.y); g.stroke();
+        g.strokeStyle = '#d9ffe9'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(d.target.x + rand(-2, 2), d.target.y + rand(-2, 2)); g.stroke();
+      }
+      g.save(); g.translate(d.x, d.y); g.rotate(d.a);
+      g.fillStyle = paint; g.strokeStyle = '#1a2233'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(8, 0); g.lineTo(-5, -6); g.lineTo(-2, 0); g.lineTo(-5, 6); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = d.venting ? '#ff8a5c' : '#57e39a'; g.fillRect(-1, -1.5, 3, 3);
+      g.restore();
+    });
+    // miner + tether
+    const m = w.miner;
+    if (m) {
+      g.strokeStyle = 'rgba(255,215,106,0.55)'; g.lineWidth = 1.5; g.setLineDash([3, 4]);
+      g.beginPath(); g.moveTo(w.ship.x, w.ship.y); g.quadraticCurveTo((w.ship.x + m.x) / 2 + 12, (w.ship.y + m.y) / 2 + 12, m.x, m.y); g.stroke();
+      g.setLineDash([]);
+      if (m.drilling && m.target) {
+        g.strokeStyle = '#ffd76a'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(m.x, m.y); g.lineTo(m.target.x + rand(-3, 3), m.target.y + rand(-3, 3)); g.stroke();
+      }
+      if (!(m.inv > 0 && Math.floor(m.inv * 12) % 2 === 0)) {
+        g.save(); g.translate(m.x, m.y);
+        g.fillStyle = paint; g.strokeStyle = '#1a2233'; g.lineWidth = 1.2;
+        g.beginPath(); g.arc(0, 2, 6, 0, Math.PI * 2); g.fill(); g.stroke();       // suit
+        g.fillStyle = '#4fb8ff'; g.beginPath(); g.arc(Math.cos(m.a) * 2, -3 + Math.sin(m.a) * 2, 3.2, 0, Math.PI * 2); g.fill(); // visor
+        g.fillStyle = '#8a96ad'; g.fillRect(-7, 0, 3, 6);                             // backpack
+        g.restore();
+      }
+      // drill reach ring
+      g.strokeStyle = 'rgba(255,215,106,0.15)'; g.lineWidth = 1;
+      g.beginPath(); g.arc(m.x, m.y, D.EVA.drillRange + BS / 2, 0, Math.PI * 2); g.stroke();
     }
   }
 
@@ -664,13 +878,13 @@ SM.Sortie = (function () {
   }
 
   // weapon damage goes through block resistance just like the laser
-  function hurtBlock(b, dmg) {
+  function hurtBlock(b, dmg, quiet) {
     if (!b.alive) return;
     const m = M[b.mat];
     b.hp -= dmg / m.res; b.flash = 0.12;
     const prev = b.state || 0, frac = b.hp / b.maxHp;
     b.state = frac > 0.66 ? 0 : frac > 0.33 ? 1 : 2;
-    if (b.state > prev) SM.Audio.crack();
+    if (b.state > prev && !quiet) SM.Audio.crack();
     if (b.hp <= 0) breakBlock(b);
   }
   function explode(x, y, r, dmg, color, quiet) {
@@ -901,6 +1115,7 @@ SM.Sortie = (function () {
     });
     g.globalAlpha = 1;
 
+    drawWingAndEva();
     drawShip(s);
 
     // popups
@@ -1024,6 +1239,7 @@ SM.Sortie = (function () {
     bar('barFuel', w.fuel / S.fuel, w.fuel / S.fuel < 0.25);
     bar('barEnergy', w.energy / S.energy, false);
     bar('barHeat', w.heat / S.heat, w.overheated);
+    bar('barO2', w.o2 / S.evaO2, w.eva && w.o2 < 8);
     $('hudCredits').textContent = w.credits.toLocaleString();
     const t = Math.max(0, Math.ceil(w.time));
     $('hudTime').textContent = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');

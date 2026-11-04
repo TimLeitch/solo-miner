@@ -92,6 +92,25 @@
 - **[NEEDS DECISION]** Are 8 salvage per shot and these reload prices right?
 - **[TODO]** Ideas for more weapons if you want them: tractor beam (pull loose blocks), mining drone escort (auto-mines beside you), cryo charge (freeze debris).
 
+### Escort wing (added 2026-11-04 at Tim's request)
+
+- **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. Each one picks its own block within reach of the ship (190 at base), flies next to it and mines it with its own laser. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
+- **[DONE]** Wing upgrades apply to every drone you own (5 levels each):
+  - Drone lasers: +30% mining power per level (250 / 600 / 1,300 / 2,800). Base 2.5 dmg/s per drone; your ship laser is 5.
+  - Drone heat sinks: +30% fire time per level (200 / 500 / 1,100 / 2,400). Base: fire 4 s, cool 2 s.
+  - Drone engines: +20% speed and reach per level (200 / 500 / 1,100 / 2,400).
+- **[DONE]** Every escort drone you own also adds **+15% to the offline drone bay rate**. It's included in the "How it's calculated" panel.
+- **[NEEDS DECISION]** Upgrades are fleet-wide (one upgrade powers up all drones). Do you want per-drone upgrades instead, or drone weapons (e.g. drones firing mini-missiles)?
+
+### Spacewalk / EVA (added 2026-11-04 at Tim's request)
+
+- **[DONE]** Tap **EVA** (gold button with the auto toggles, desktop V) to leave the ship on a 260-unit tether. The ship parks, the stick now moves the miner, and your escort drones keep mining.
+- **[DONE]** **Hand drill** with short range. It **ignores block resistance**, so it is better than the base laser on cobalt, iridium and alloy. It uses MINE or auto-fire.
+- **[DONE]** **Relics:** 4 glowing pickups per field, only collectable on foot. They're worth 60 / 140 / 240 / 380 cr (±30%) by field, plus 10 XP each, and are listed in the summary.
+- **[DONE]** **Oxygen** (30 s base) is shown as an O2 bar. Debris hits cost 6 s of oxygen and active electrical fields drain it. The hull is never hurt on a spacewalk. At empty oxygen the tether reels you back automatically. Tap EVA again to reel back early. Oxygen refills while you're aboard.
+- **[DONE]** New miner upgrades (Upgrades > Miner): **EVA mobility** (+15% speed), **Oxygen tank** (+25% oxygen), **Hand drill** (+30% drill power).
+- **[TODO]** Discovery contracts for relics, and boarding/repair events for the reinforced suit.
+
 ### Checklist against the design document
 
 **Core loop & mining**
@@ -139,7 +158,8 @@
 - [DONE] Field scanner - **reinterpreted** as "+15% contract rewards" since there are no discovery objects yet.
 - [DONE] Miner rank from XP (blocks, first discoveries, contracts). Rank 3 = second contract slot; ranks 2/4/6/8 unlock shuttle paints.
 - [NEEDS DECISION] Miner upgrade costs are not in the README; I used 140-2,100 cr ranges. Confirm or replace.
-- [TODO] EVA mobility, utility belt and consumables (need EVA/boarding events and consumable items to be designed first).
+- [DONE] EVA mobility, oxygen tank and hand drill (see *Spacewalk / EVA* above).
+- [TODO] Utility belt and consumables.
 
 **Contracts**
 - [DONE] Material order, Speed extraction, Safe pilot. Shown with requirements and rewards up front, 3 offers refresh every 4 hours, 1 active slot (2 at Rank 3). Unlocked after the first sortie.
