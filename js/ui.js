@@ -77,7 +77,7 @@ SM.UI = (function () {
 
   function affordableAny() {
     const s = St.get();
-    return [...D.SHUTTLE, ...D.MINER, ...D.WING.upgrades, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
+    return St.droneAffordable() || [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
       || (St.wingCost() != null && St.wingCost() <= s.credits)
       || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; });
   }
@@ -280,14 +280,31 @@ SM.UI = (function () {
       const wing = St.get().wing, wc = St.wingCost(), canW = wc != null && St.get().credits >= wc;
       html += `<h3>Escort wing</h3><div class="card">
         <div class="row"><div><b>Escort drones</b> <span class="small muted">${wing.count}/${D.WING.max} owned</span>
-          <div class="small muted">They fly around you during a sortie, each picks its own block within reach and mines it. They vent heat and resume by themselves. Each one also adds +${Math.round(D.WING.offlineBonus * 100)}% to the drone bay's offline rate.</div></div></div>
+          <div class="small muted">They fly around you during a sortie, each picks its own block within reach and mines it. They vent heat and resume by themselves. Every drone has its own upgrades plus a weapon slot and a gear slot (below). Each one also adds +${Math.round(D.WING.offlineBonus * 100)}% to the drone bay's offline rate.</div></div></div>
         <div class="wstats" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${Array.from({ length: D.WING.max }, (_, i) => `<span class="chip">${i < wing.count ? '&#9650; Drone ' + (i + 1) : '&#9651; empty'}</span>`).join('')}</div>
         ${wc == null ? '<span class="tag grey">WING FULL</span>' : `<button class="btn ${canW ? '' : 'ghost'} small-btn" data-wingbuy>Buy drone ${wing.count + 1} - ${fmt(wc)} cr</button>`}
-        <div class="small muted" style="margin-top:8px">Per drone now: ${S.wingDps.toFixed(1)} dmg/s, fires ${S.wingFire.toFixed(1)}s then cools ${D.WING.coolTime}s, reach ${Math.round(S.wingReach)}.</div>
       </div>`;
-      D.WING.upgrades.forEach(u => {
-        const l = St.lvl(u.id), maxed = St.upgradeCost(u.id) == null;
-        html += upgradeRow(u, u.id, `${u.stat}: ${pct(u.per * (l - 1))}` + (maxed ? '' : ` &rarr; <b>${pct(u.per * l)}</b>`) + ' (all drones)');
+      // ----- per-drone loadouts -----
+      wing.drones.forEach((d, i) => {
+        const ds = St.droneStats(d);
+        const ups = D.WING.upgrades.map(u => {
+          const l = d.lv[u.id], c = St.droneUpCost(i, u.id), can = c != null && St.get().credits >= c;
+          const pips = Array.from({ length: u.costs.length + 1 }, (_, k) => `<i class="${k < l ? 'on' : ''}"></i>`).join('');
+          return `<div class="dup"><div><b>${{ wlaser: 'Laser', wcool: 'Heat sink', wengine: 'Engines' }[u.id]}</b> <span class="small muted">Lv ${l}</span><div class="pips">${pips}</div></div>
+            ${c == null ? '<span class="tag grey">MAX</span>' : `<button class="btn ${can ? '' : 'ghost'} small-btn" data-dup="${i}:${u.id}">${fmt(c)} cr</button>`}</div>`;
+        }).join('');
+        const mods = (list, slot) => list.map(m => {
+          const own = d.owned[m.id], on = d[slot] === m.id, can = St.get().credits >= m.cost;
+          const label = on ? 'Equipped' : own ? 'Equip' : `${fmt(m.cost)} cr`;
+          return `<button class="mod ${on ? 'on' : ''} ${!own && !can ? 'poor' : ''}" data-mod="${i}:${m.id}" title="${esc(m.desc)}">
+            <span class="micon">${m.icon}</span><b>${esc(m.name)}</b><small>${esc(m.desc)}</small><em>${label}</em></button>`;
+        }).join('');
+        html += `<div class="card dcard">
+          <div class="row"><b>&#9650; Drone ${i + 1}</b><span class="small muted">${ds.dps.toFixed(1)} dmg/s - fires ${ds.fire.toFixed(1)}s - reach ${Math.round(ds.reach)}</span></div>
+          <div class="dups">${ups}</div>
+          <div class="label" style="margin-top:10px">Weapon slot</div><div class="mods">${mods(D.WING.weapons, 'weapon')}</div>
+          <div class="label" style="margin-top:10px">Gear slot</div><div class="mods">${mods(D.WING.gear, 'gear')}</div>
+        </div>`;
       });
       html += `<h3>Offline drone bay</h3>`;
       const l = St.lvl('drone');
@@ -302,6 +319,18 @@ SM.UI = (function () {
       </div>`;
     }
     list.innerHTML = html;
+    list.querySelectorAll('[data-dup]').forEach(b => b.addEventListener('click', () => {
+      const [i, id] = b.dataset.dup.split(':');
+      if (St.buyDroneUp(+i, id)) { SM.Audio.buy(); render(); } else { SM.Audio.deny(); toast('Not enough credits'); }
+    }));
+    list.querySelectorAll('[data-mod]').forEach(b => b.addEventListener('click', () => {
+      const [i, id] = b.dataset.mod.split(':');
+      const r = St.droneModule(+i, id), name = St.moduleDef(id).name;
+      if (r === 'poor') { SM.Audio.deny(); return toast('Not enough credits'); }
+      SM.Audio[r === 'bought' ? 'buy' : 'click']();
+      toast(r === 'bought' ? `${name} installed on drone ${+i + 1}` : r === 'equipped' ? `${name} equipped` : `${name} removed`);
+      render();
+    }));
     list.querySelectorAll('[data-wingbuy]').forEach(b => b.addEventListener('click', () => {
       SM.Audio.unlock();
       if (St.buyWingDrone()) { SM.Audio.buy(); toast(`Escort drone ${St.get().wing.count} joined your wing`); render(); }

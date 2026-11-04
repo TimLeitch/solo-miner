@@ -76,6 +76,23 @@ SM.DATA = (function () {
       { id: 'wcool',   name: 'Drone heat sinks', stat: 'Drone fire time',    per: 0.30, costs: [200, 500, 1100, 2400], unit: '%' },
       { id: 'wengine', name: 'Drone engines',    stat: 'Drone speed & reach', per: 0.20, costs: [200, 500, 1100, 2400], unit: '%' },
     ],
+    // Each drone has one weapon slot and one gear slot. Buy a module for that drone once, then equip freely.
+    weapons: [
+      { id: 'pod',   name: 'Mini-missile pod', icon: '\u27B6', cost: 500, cd: 5, ammo: 6, dmg: 22, radius: 22,
+        desc: 'Fires a small seeker at the drone\'s block every 5 s (6 per sortie).' },
+      { id: 'flak',  name: 'Flak gun',         icon: '\u2739', cost: 400, cd: 2.5, range: 150,
+        desc: 'Shoots down debris that comes near you or the drone.' },
+      { id: 'pulse', name: 'Pulse charge',     icon: '\u25C9', cost: 600, cd: 7, dmg: 14, radius: 46,
+        desc: 'Every 7 s, a pulse cracks the blocks around the drone\'s target.' },
+    ],
+    gear: [
+      { id: 'shield',    name: 'Shield projector', icon: '\u26E8', cost: 450, cd: 20,
+        desc: 'Blocks one debris hit on your ship, recharges in 20 s.' },
+      { id: 'collector', name: 'Relic collector',  icon: '\u2726', cost: 350,
+        desc: 'Fetches relics within reach, no spacewalk needed.' },
+      { id: 'overclock', name: 'Overclock',        icon: '\u26A1', cost: 400, dpsMult: 1.4, heatMult: 1.3,
+        desc: '+40% laser power, heats up 30% faster.' },
+    ],
   };
 
   // Spacewalk (EVA): the miner leaves the ship on a tether.

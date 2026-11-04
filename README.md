@@ -95,12 +95,19 @@
 ### Escort wing (added 2026-11-04 at Tim's request)
 
 - **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. Each one picks its own block within reach of the ship (190 at base), flies next to it and mines it with its own laser. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
-- **[DONE]** Wing upgrades apply to every drone you own (5 levels each):
-  - Drone lasers: +30% mining power per level (250 / 600 / 1,300 / 2,800). Base 2.5 dmg/s per drone; your ship laser is 5.
-  - Drone heat sinks: +30% fire time per level (200 / 500 / 1,100 / 2,400). Base: fire 4 s, cool 2 s.
-  - Drone engines: +20% speed and reach per level (200 / 500 / 1,100 / 2,400).
+- **[DONE]** **Every drone has its own loadout** (Upgrades > Drones, one card per drone). Existing saves carry their old fleet-wide levels over to each drone.
+  - Own upgrades, 5 levels each: **Laser** +30% power (250 / 600 / 1,300 / 2,800), **Heat sink** +30% fire time (200 / 500 / 1,100 / 2,400), **Engines** +20% speed and reach (200 / 500 / 1,100 / 2,400). Base: 2.5 dmg/s, fires 4 s then cools 2 s, reach 190. Your ship laser is 5 dmg/s.
+  - **Weapon slot** (buy once per drone, then equip freely):
+    - Mini-missile pod (500 cr): fires a small seeker at the drone's block every 5 s, 6 per sortie, 22 damage, small blast.
+    - Flak gun (400 cr): every 2.5 s shoots down debris that gets within 150 of you or the drone.
+    - Pulse charge (600 cr): every 7 s, a 46-radius pulse does 14 damage around the drone's target.
+  - **Gear slot:**
+    - Shield projector (450 cr): blocks one debris hit on your ship, recharges in 20 s. Several shield drones stack.
+    - Relic collector (350 cr): flies out to grab relics near you, so no spacewalk is needed.
+    - Overclock (400 cr): +40% drone laser power, but heats up 30% faster.
 - **[DONE]** Every escort drone you own also adds **+15% to the offline drone bay rate**. It's included in the "How it's calculated" panel.
-- **[NEEDS DECISION]** Upgrades are fleet-wide (one upgrade powers up all drones). Do you want per-drone upgrades instead, or drone weapons (e.g. drones firing mini-missiles)?
+- **[DECIDED - Tim, 2026-11-04]** Drones get their own equipment and weapons (per-drone loadouts above).
+- **[NEEDS DECISION]** Module prices and cooldowns are first guesses.
 
 ### Spacewalk / EVA (added 2026-11-04 at Tim's request)
 
