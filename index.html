@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Solo Miner - pilot a mining shuttle, break asteroid blocks for credits, upgrade, and keep earning while away.">
+  <title>Solo Miner</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ================= HANGAR ================= -->
+  <div id="hangar">
+    <header class="topbar">
+      <div class="wallet">
+        <span class="coin" aria-hidden="true">&#9679;</span>
+        <span id="credits">0</span><span class="unit">cr</span>
+      </div>
+      <button class="rank" id="rankBtn" aria-label="Miner rank">
+        <span>Rank <b id="rank">1</b></span>
+        <span class="xpbar"><i id="xpFill"></i></span>
+      </button>
+      <button class="icon-btn" id="btnSettings" aria-label="Settings">&#9881;</button>
+    </header>
+
+    <main id="screens">
+      <!-- Hangar home -->
+      <section class="screen" id="scr-home">
+        <div class="ship-card">
+          <canvas id="shipPreview" width="240" height="140" aria-hidden="true"></canvas>
+          <div class="ship-meta">
+            <div class="label">Hull</div>
+            <div class="meter"><i id="homeHull"></i></div>
+            <div class="small" id="homeHullText"></div>
+            <button class="btn ghost small-btn" id="btnRepair">Repair</button>
+          </div>
+        </div>
+
+        <div class="card drone-card" id="droneCard"></div>
+
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="label">Destination</div>
+              <div class="big" id="homeRegion">Nearside Belt</div>
+              <div class="small" id="homeRegionInfo"></div>
+            </div>
+            <button class="btn ghost small-btn" data-goto="regions">Change</button>
+          </div>
+        </div>
+
+        <div class="card" id="homeContract"></div>
+        <div class="card hint" id="homeHint" hidden></div>
+        <div class="card recent" id="recent" hidden></div>
+
+        <button class="btn launch" id="btnLaunch">LAUNCH</button>
+      </section>
+
+      <!-- Upgrades -->
+      <section class="screen" id="scr-upgrades" hidden>
+        <div class="seg" role="tablist">
+          <button class="on" data-seg="shuttle">Shuttle</button>
+          <button data-seg="miner">Miner</button>
+          <button data-seg="drone">Drone</button>
+        </div>
+        <div id="upgradeList"></div>
+      </section>
+
+      <!-- Regions -->
+      <section class="screen" id="scr-regions" hidden>
+        <h2>Asteroid fields</h2>
+        <div id="regionList"></div>
+      </section>
+
+      <!-- Contracts -->
+      <section class="screen" id="scr-contracts" hidden>
+        <h2>Contracts</h2>
+        <div class="small muted" id="contractInfo"></div>
+        <h3>Active</h3>
+        <div id="contractActive"></div>
+        <h3>Offers</h3>
+        <div id="contractOffers"></div>
+        <h3>Miner rank rewards</h3>
+        <div id="rankRewards"></div>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button class="on" data-goto="home"><span aria-hidden="true">&#9650;</span>Hangar</button>
+      <button data-goto="upgrades"><span aria-hidden="true">&#9881;</span>Upgrades<i class="dot" id="upDot" hidden></i></button>
+      <button data-goto="regions"><span aria-hidden="true">&#9675;</span>Fields</button>
+      <button data-goto="contracts"><span aria-hidden="true">&#9776;</span>Contracts<i class="dot" id="ctDot" hidden></i></button>
+    </nav>
+  </div>
+
+  <!-- ================= SORTIE ================= -->
+  <div id="sortie" hidden>
+    <canvas id="game"></canvas>
+    <div id="hud">
+      <div class="hud-top">
+        <button class="icon-btn" id="btnPause" aria-label="Pause">&#10074;&#10074;</button>
+        <div class="hud-bars">
+          <div class="hbar hull"><span>HULL</span><div><i id="barHull"></i></div></div>
+          <div class="hbar fuel"><span>FUEL</span><div><i id="barFuel"></i></div></div>
+          <div class="hbar energy"><span>BOOST</span><div><i id="barEnergy"></i></div></div>
+          <div class="hbar heat"><span>HEAT</span><div><i id="barHeat"></i></div></div>
+        </div>
+        <div class="hud-right">
+          <div class="hud-credits"><span class="coin">&#9679;</span><b id="hudCredits">0</b></div>
+          <div class="hud-time" id="hudTime">3:00</div>
+        </div>
+      </div>
+      <div class="hud-sub"><span id="regionLabel"></span></div>
+      <div id="targetInfo" hidden>
+        <div class="trow"><b id="tName"></b><span id="tValue"></span></div>
+        <div class="thp"><i id="tHp"></i></div>
+        <div class="small" id="tHint"></div>
+      </div>
+      <div id="tutorial" hidden></div>
+      <div id="captions" aria-live="polite"></div>
+    </div>
+    <div id="controls">
+      <div class="toggles">
+        <button id="tglFire" class="tgl" aria-pressed="false">FIRE<small>AUTO OFF</small></button>
+        <button id="tglBoost" class="tgl" aria-pressed="false">BOOST<small>AUTO OFF</small></button>
+        <button id="tglPilot" class="tgl" aria-pressed="false">PILOT<small>AUTO OFF</small></button>
+      </div>
+      <button id="btnReturn" class="ctl return">RETURN<small>bank credits</small></button>
+      <button id="btnBoost" class="ctl boost">BOOST<small>hold</small></button>
+      <button id="btnMine" class="ctl mine">MINE<small>hold</small></button>
+    </div>
+    <div id="pauseMenu" class="overlay" hidden>
+      <div class="modal">
+        <h2>Paused</h2>
+        <p class="muted">Your credits are safe. Returning now banks everything you've mined this sortie.</p>
+        <button class="btn" id="btnResume">Resume</button>
+        <button class="btn ghost" id="btnPauseReturn">Return to hangar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+  <div id="modal" class="overlay" hidden>
+    <div class="modal" id="modalBody"></div>
+  </div>
+  <div id="toast" hidden></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/sortie.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

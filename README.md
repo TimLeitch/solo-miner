@@ -1,5 +1,148 @@
 # Solo Miner
 
+## Build Status (browser version)
+
+> Built by Claude on 2026-11-04. The game is a mobile-first **browser game** (works on phones, tablets and desktop) built from the design document below. Items marked **[DONE]** are playable now; **[TODO]** is not built yet; **[NEEDS DECISION]** is something I guessed at and need you to confirm or change.
+
+### How to run
+
+- No build step, no dependencies. Plain HTML/CSS/JavaScript.
+- Quick look: open `index.html` directly in a browser (offline caching won't be active this way).
+- Proper (phone) testing: serve the folder over HTTP, e.g. `python3 -m http.server 8080` in this folder, then open `http://<your-computer-ip>:8080` on your phone (same Wi-Fi). On Android Chrome use **menu > Add to Home screen / Install app** to get a full-screen app icon.
+- To host for real, drop the folder on any static host (GitHub Pages, Netlify, an internal web server). Installing as an app and offline play need **HTTPS** (or localhost).
+- Desktop keys for testing: WASD/arrows move, Space mine, Shift boost, Tab target nearest, R return, P/Esc pause.
+
+### Files
+
+| File | Purpose |
+| ---- | ------- |
+| `index.html` | Page layout: hangar screens, sortie HUD, controls, modals |
+| `css/style.css` | All styling, mobile-first, safe-area aware |
+| `js/data.js` | **All tuning numbers** (materials, regions, upgrade costs, drone rates, base stats). Edit here to rebalance. |
+| `js/state.js` | Save/load (localStorage), derived stats, purchases, region unlocks, **offline gains**, contracts |
+| `js/sortie.js` | The mining run: world generation, touch stick, laser/heat, debris, electrical fields, rendering, HUD |
+| `js/ui.js` | Hangar, upgrade bay, fields, contracts, settings, summary and welcome-back screens |
+| `js/audio.js` | Synthesized sound effects (no audio files needed) |
+| `js/main.js` | Boot, game flow, autosave, pause-on-background, crash recovery, service worker registration |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Installable app (PWA) + offline caching. Bump `CACHE` in `sw.js` when you ship changes. |
+
+### Offline gains - Mining drone (new - not in the original design)
+
+- **[DONE]** The drone mines in **real time** into a storage bin, whether the game is open, in the background or fully closed. You collect the bin from the hangar.
+- **[DONE]** Exact formulas (code: `js/state.js` > `accrue()` / `droneStatus()`; numbers: `js/data.js` > `DRONE`):
+
+  ```
+  rate (cr/hr)   = ratePerHour[droneLevel] x regionMult[best unlocked field]
+  capacity (cr)  = rate x capHours[droneLevel]
+  stored         = min(capacity, stored + rate x hoursSinceLastUpdate)
+  full in (hrs)  = (capacity - stored) / rate
+  stored after H hours away = min(capacity, stored + rate x H)
+  ```
+
+  | Drone level | Base rate | Storage time | Upgrade cost |
+  | ----------- | --------: | -----------: | -----------: |
+  | 1 | 120 cr/hr | 2 h | (start) |
+  | 2 | 300 cr/hr | 4 h | 200 |
+  | 3 | 600 cr/hr | 6 h | 500 |
+  | 4 | 1,100 cr/hr | 8 h | 1,200 |
+  | 5 | 1,800 cr/hr | 12 h | 2,800 |
+
+  Field bonus (best field unlocked): Nearside x1, Red Shard x1.5, Glass Moon x2.2, Far Orbit x3.
+- **[DONE]** When the rate changes (drone upgrade or new field) the bin is settled first, so time before the change pays the old rate and time after pays the new one.
+- **[DONE]** "Know where you'll be when you log on": the hangar drone card shows the live bin (e.g. 140 / 240 cr), **full in Xh Ym (at 9:45 PM)**, and a table of *"If you come back in 1h / 4h / 8h"* with both the drone amount and your **wallet total** at that point. A "How it's calculated" panel shows the formula with your actual numbers.
+- **[DONE]** Welcome-back screen shows the math: stored when you left, `hours counted x rate = gained`, storage now, how much time was wasted if the bin filled up, and your wallet after collecting.
+- **[DONE]** Clock set backwards earns nothing. Drone credits count toward lifetime credits (field unlocks) when collected.
+- **[NEEDS DECISION]** Are these rates right? At Level 1, a full bin (240 cr) is about 1-2 active sorties.
+- **[NEEDS DECISION]** Should drone credits count toward field unlocks, or only credits from active play?
+
+### Auto-play controls (added 2026-11-04)
+
+- **[DONE]** Three toggle buttons above MINE/BOOST during a sortie: **FIRE**, **BOOST** and **PILOT**. Each one is AUTO ON or AUTO OFF, saves with your settings, and is also in Settings. Desktop keys: F / B / G.
+- **[DONE]** Auto-fire (on by default): the laser fires by itself at whatever is in range. No need to hold MINE.
+- **[DONE]** Auto-boost (off by default): boosts whenever you're moving and have energy. It stops at empty and restarts at 50% energy. Boosting burns more fuel.
+- **[DONE]** Autopilot (on by default, only during a sortie): when you stop steering for about half a second and nothing is in range, the ship flies itself to the next block and mines it. It goes to your tapped target first, otherwise it picks the nearest block, favouring valuable ones. It steers around debris and live electrical fields, and picks a new block if it gets stuck. Touch the stick and you're back in control instantly. A green dotted line shows where it's heading.
+- **[DECIDED - Tim, 2026-11-04]** Autopilot keeps mining until fuel or time runs out, then the automatic tow-home banks everything. It does not return early on its own.
+
+### Laser heat (changed 2026-11-04 at Tim's request)
+
+- **[DONE]** The laser never maxes out its heat. At **90% heat** it pauses on its own and vents, cools down to **20%**, then **starts mining again automatically**. This works with auto-fire and with holding MINE. The HUD shows "Cooling - resumes in X s".
+- **[DONE]** Base: 10 s of heat capacity and 3 heat/s cooling, so about 9 s of firing then about 2.3 s of cooling at Level 1.
+- **[DONE]** Easier upgrades. These replace the README table values for these two systems:
+  - Mining laser: **+25% power per level** (was +20%), costs **80 / 200 / 450 / 1,000** (were 100 / 250 / 600 / 1,400).
+  - Heat sink: **+25% heat capacity and +25% cooling speed per level** (was +15% capacity only), costs **80 / 200 / 450 / 1,000** (were 140 / 340 / 800 / 1,900).
+  - The Upgrades screen shows the actual fire time and cool time for your current heat sink.
+
+### Checklist against the design document
+
+**Core loop & mining**
+- [DONE] Hangar > choose field > launch > mine > return > summary > upgrade > repeat.
+- [DONE] Blocks have health, resistance, credit value and material type; credits only paid on destruction; partial damage persists for the sortie.
+- [DONE] Four damage states (intact, cracked, heavily damaged, destroyed) with cracks, particles, sound and a "+credits" pop-up.
+- [DONE] Each material has its own colour **and** its own symbol (dot, bars, diamond, triangle, ring, cross, star) so type never relies on colour alone.
+- [DONE] All 7 materials from the table (plus "Moon glass" for Glass Moon, which had no named block - **[NEEDS DECISION]** name/stats: 60 health, 1.4x, 90 cr).
+- [DONE] Continuous laser damage (chosen over discrete pulses) with a heat bar and overheat cooldown.
+
+**Controls (touch)**
+- [DONE] Floating virtual stick: drag anywhere on the left half to fly.
+- [DONE] Tap a block to target it (forgiving touch radius); hold MINE to fire; hold BOOST to move fast (uses energy + extra fuel); RETURN banks credits any time.
+- [DONE] Aim assist (auto-picks nearest block in range) - on by default, toggleable.
+- [DONE] Auto-fire, auto-boost and autopilot toggles (see *Auto-play controls* above).
+- [DONE] Left-handed layout, control opacity, UI scale, vibration toggle.
+- [DONE] Pauses automatically when the app/tab loses focus.
+- [DONE] Portrait-first; landscape also works (wider view).
+- [TODO] Fully remappable/movable buttons (only left/right swap exists now).
+
+**Sorties, fuel and risk**
+- [DONE] Fuel budget (only movement/boost burns fuel, mining doesn't). Fuel empty = towed home with all credits.
+- [DONE] Soft time limit (3:00 base, scales with fuel tank upgrades). Time out = autopilot home with all credits.
+- [DONE] Hull; drifting debris (red outline + direction line, telegraphed) damages hull. Bumping into blocks never damages you.
+- [DONE] Hull at zero = emergency return keeping 75% of sortie credits (Reinforced suit raises this).
+- [DONE] Repair quote shown in hangar and in the summary; repair button. Hull persists between sorties.
+- [DONE] Never soft-locks: if you can't afford repair and hull is under 25%, the station patches you to 25% for free.
+- [DONE] Electrical fields hazard (Glass Moon, Far Orbit): dormant > flashing warning > active, damage while inside.
+- [DONE] Low fuel, critical hull, 30-seconds-left warnings with sound, vibration and on-screen captions.
+- [NEEDS DECISION] Sortie length: 3 minutes base. Fuel lasts about 3 minutes of continuous flying. Tell me if you want shorter/longer runs.
+
+**Economy & upgrades**
+- [DONE] Credits, lifetime credits, payout pop-ups, sortie summary split into blocks / contracts / bonuses / emergency loss / repair quote.
+- [DONE] First-time region bonus (150 / 500 / 1,200 / 3,000 cr) - **[NEEDS DECISION]** values are mine.
+- [DONE] All 8 shuttle systems with the README's costs, 5 levels each, stat preview before buying.
+- [DONE] "Recommended upgrade" hint on the hangar and summary screens (points at the laser if a field needs it).
+- [DONE] Visual upgrades: laser emitter grows/changes colour, armour plates at Hull 3, engine glow in hangar preview.
+- [DONE] Region unlocks by lifetime credits + laser level, exactly as the table.
+- [TODO] Cosmetic shop (only rank-unlocked paints exist).
+
+**Miner / character**
+- [DONE] Repair training (-8%/level, capped -32%).
+- [DONE] Reinforced suit - **reinterpreted** as "+5% credits kept after hull failure" since there are no boarding events yet.
+- [DONE] Field scanner - **reinterpreted** as "+15% contract rewards" since there are no discovery objects yet.
+- [DONE] Miner rank from XP (blocks, first discoveries, contracts). Rank 3 = second contract slot; ranks 2/4/6/8 unlock shuttle paints.
+- [NEEDS DECISION] Miner upgrade costs are not in the README; I used 140-2,100 cr ranges. Confirm or replace.
+- [TODO] EVA mobility, utility belt and consumables (need EVA/boarding events and consumable items to be designed first).
+
+**Contracts**
+- [DONE] Material order, Speed extraction, Safe pilot. Shown with requirements and rewards up front, 3 offers refresh every 4 hours, 1 active slot (2 at Rank 3). Unlocked after the first sortie.
+- [TODO] Survey run and Discovery contracts (need scan targets / rare formations).
+- [TODO] Daily objectives.
+
+**Screens, audio, accessibility, saves**
+- [DONE] Hangar, Upgrades (Shuttle / Miner / Drone tabs), Fields, Contracts, Settings, Sortie HUD, Sortie summary, Welcome back.
+- [DONE] Synthesized sound effects with volume; per-material break sounds scaled by value.
+- [DONE] High-contrast mode, captions, reduced effects, screen shake toggle, reduced-motion respected.
+- [DONE] Auto-save every 5s, after purchases and sorties, and when backgrounded. If the browser kills the game mid-sortie, those credits are banked on next launch ("Recovered" summary).
+- [DONE] First play session: guided hints (fly, tap the cracked block, hold MINE, keep mining, return) shown once; a pre-damaged rock sits near the hangar.
+- [TODO] Ambient music track, separate music/SFX volume.
+- [TODO] Cloud save / sync between devices (save lives in this browser only - clearing browser data erases it).
+- [TODO] Analytics for the playtest metrics listed at the bottom of this doc.
+
+### Questions for you (please answer inline or in the project chat)
+
+1. **Hosting:** where should this live so you can play it on your phone (GitHub Pages, internal server, something else)? HTTPS is needed for install + offline.
+2. **Native Android:** the original doc targets Android. Do you want this wrapped as a real Android app later (e.g. Capacitor/TWA), or is the browser/PWA version the goal?
+3. **Offline gains balance** (see the two decisions above).
+4. **Sortie length** - is ~3 minutes the right feel?
+5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
+
 ## Game Design Document
 
 ### Overview
