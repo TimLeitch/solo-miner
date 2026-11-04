@@ -217,3 +217,7 @@ body.in-sortie #hangar { display: none; }
 .wcard .wicon { font-size: 26px; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #0006; flex-shrink: 0; }
 .wcard .wstats { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .wcard .btns { display: flex; gap: 8px; }
+.wpn-wrap::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; background: conic-gradient(var(--gold) var(--salv, 0deg), #fff2 0); -webkit-mask: radial-gradient(circle, transparent 36px, #000 37px); mask: radial-gradient(circle, transparent 36px, #000 37px); opacity: var(--ctl-opacity); pointer-events: none; }
+.reload { pointer-events: auto; position: absolute; top: -18px; left: -10px; min-width: 40px; height: 34px; border-radius: 17px; border: 2px solid var(--gold); background: #2a2000e6; color: var(--gold); font-size: 12px; font-weight: 900; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 5px; opacity: var(--ctl-opacity); }
+.reload small { font-size: 8px; font-weight: 700; }
+.reload.off { border-color: #fff3; color: var(--muted); background: #000c; }

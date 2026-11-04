@@ -139,10 +139,10 @@ SM.Sortie = (function () {
       cam: { x: world.dock.x, y: world.dock.y - 200 },
       warned: {}, tut: st.tutorial ? 0 : -1, ended: false,
       boosting: false,
-      proj: [], fx: [], ammo: {}, weapon: null,
+      proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
     });
     const wp = st.weapons;
-    Object.keys(wp.owned).forEach(id => { if (wp.owned[id]) w.ammo[id] = SM.State.weaponStats(id).ammo; });
+    Object.keys(wp.owned).forEach(id => { if (wp.owned[id]) w.ammo[id] = w.maxAmmo[id] = SM.State.weaponStats(id).ammo; });
     w.weapon = wp.owned[wp.equipped] ? wp.equipped : (Object.keys(w.ammo)[0] || null);
     $('wpnWrap').hidden = !w.weapon;
     $('btnSwap').hidden = Object.keys(w.ammo).length < 2;
@@ -198,6 +198,7 @@ SM.Sortie = (function () {
     const share = emergency ? Math.min(0.95, w.S.emergencyShare) : 1;
     const result = {
       reason, region: w.region.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
+      ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
       byMat: w.byMat, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
@@ -274,6 +275,7 @@ SM.Sortie = (function () {
     }
     $('btnWeapon').addEventListener('pointerdown', e => { e.preventDefault(); SM.Audio.unlock(); if (running && !paused) fireWeapon(); });
     $('btnSwap').addEventListener('click', () => { SM.Audio.click(); cycleWeapon(); });
+    $('btnReload').addEventListener('click', () => { SM.Audio.unlock(); if (running && !paused) buyReload(); });
     hold('btnMine', 'mine');
     hold('btnBoost', 'boost');
     [['tglFire', 'autoFire', 'Auto-fire'], ['tglBoost', 'autoBoost', 'Auto-boost'], ['tglPilot', 'autopilot', 'Autopilot']].forEach(([id, k, label]) => {
@@ -297,6 +299,7 @@ SM.Sortie = (function () {
       if (e.code === 'KeyR' && !paused) end('return');
       if (e.code === 'KeyQ' && !paused) fireWeapon();
       if (e.code === 'KeyE' && !paused) cycleWeapon();
+      if (e.code === 'KeyX' && !paused) buyReload();
       if (e.code === 'KeyF') $('tglFire').click();
       if (e.code === 'KeyB') $('tglBoost').click();
       if (e.code === 'KeyG') $('tglPilot').click();
@@ -628,6 +631,38 @@ SM.Sortie = (function () {
     }
     hud();
   }
+  // ---------- reloading ----------
+  function needsAmmo(id) { return id in w.ammo && w.ammo[id] < w.maxAmmo[id]; }
+  // Salvage from broken blocks reloads the equipped weapon first, then any other owned weapon that isn't full.
+  function addSalvage(n) {
+    if (!w.weapon) return;
+    const T = D.SALVAGE_PER_SHOT;
+    w.salvage += n;
+    while (w.salvage >= T) {
+      const id = needsAmmo(w.weapon) ? w.weapon : Object.keys(w.ammo).find(needsAmmo);
+      if (!id) { w.salvage = T; break; } // everything full: meter waits at 100%
+      w.ammo[id]++; w.salvage -= T; w.shotsSalvaged++;
+      SM.Audio.buy();
+      caption(`Salvage reloaded +1 ${SM.State.weaponDef(id).name}`, 'good');
+    }
+  }
+  // Buy one shot of the equipped weapon. Paid from this sortie's credits first, then the wallet.
+  function buyReload() {
+    if (!w || !w.weapon) return;
+    const id = w.weapon, def = SM.State.weaponDef(id), st = SM.State.get();
+    if (!needsAmmo(id)) { caption(def.name + ' is fully loaded'); return; }
+    const cost = def.reload;
+    if (w.credits + st.credits < cost) { SM.Audio.deny(); caption(`Need ${cost} cr to reload`, 'warn'); return; }
+    const fromRun = Math.min(w.credits, cost), fromWallet = cost - fromRun;
+    w.credits -= fromRun; st.credits -= fromWallet;
+    w.ammoRun += fromRun; w.ammoWallet += fromWallet; w.shotsBought++;
+    if (fromWallet) SM.State.save();
+    w.ammo[id]++;
+    SM.Audio.buy();
+    caption(`Bought 1 ${def.name} shot -${cost} cr`);
+    hud();
+  }
+
   // weapon damage goes through block resistance just like the laser
   function hurtBlock(b, dmg) {
     if (!b.alive) return;
@@ -693,6 +728,7 @@ SM.Sortie = (function () {
     const m = M[b.mat];
     w.credits += m.value; w.broken++; w.xp += m.xp;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
+    addSalvage(m.xp);
     const st = SM.State.get();
     if (!st.discovered[b.mat]) { st.discovered[b.mat] = true; w.xp += 5; caption('New material discovered: ' + m.name, 'good'); }
     SM.Audio.brk(m.value);
@@ -1010,6 +1046,11 @@ SM.Sortie = (function () {
       $('btnWeapon').style.background = `radial-gradient(circle, ${def.color}cc, #111c)`;
       $('btnWeapon').classList.toggle('empty', n <= 0);
       $('btnWeapon').setAttribute('aria-label', `Fire ${def.name}, ${n} left`);
+      const full = !needsAmmo(w.weapon);
+      $('wpnWrap').style.setProperty('--salv', (Math.min(1, w.salvage / D.SALVAGE_PER_SHOT) * 360) + 'deg');
+      $('btnReload').innerHTML = full ? 'FULL' : `+1<small>${def.reload}cr</small>`;
+      $('btnReload').classList.toggle('off', full || w.credits + SM.State.get().credits < def.reload);
+      $('btnReload').setAttribute('aria-label', full ? 'Weapon full' : `Buy 1 shot for ${def.reload} credits`);
     }
   }
 

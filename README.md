@@ -85,7 +85,11 @@
 | Plasma lance | Instant beam that pierces every block in a straight line | 32 | 380 long | 5 | 600 / 1,200 / 2,400 |
 | Shockwave | Pulse around the ship: destroys nearby debris, resets electrical fields to dormant, damages close blocks | 18 | 150 radius | 2 | 350 / 700 / 1,400 |
 
-- **[NEEDS DECISION]** Ammo is free each sortie. Do you want ammo to cost credits instead (buy per launch), or keep it free?
+- **[DONE]** Ammo is full at every launch. **Reloading during a run** works two ways:
+  - **Salvage:** every destroyed block adds salvage equal to its material XP (rock 1, iron 2, nickel crystal 3, cobalt 5, glass 6, iridium 8, alloy 12). Every **8 salvage** reloads 1 shot, going to the equipped weapon first and then to any other owned weapon that isn't full. A gold ring around the weapon button shows progress.
+  - **Buy:** the gold **+1** button buys one shot of the equipped weapon: missile 30, grenade 40, lance 50, shockwave 35 cr. It is paid from that run's credits first, then your wallet. The sortie summary shows the cost. Desktop: X.
+  - Tuning lives in `js/data.js`: `SALVAGE_PER_SHOT` and each weapon's `reload` price.
+- **[NEEDS DECISION]** Are 8 salvage per shot and these reload prices right?
 - **[TODO]** Ideas for more weapons if you want them: tractor beam (pull loose blocks), mining drone escort (auto-mines beside you), cryo charge (freeze debris).
 
 ### Checklist against the design document

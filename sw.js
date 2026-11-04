@@ -1,6 +1,6 @@
 /* Solo Miner service worker: caches the game so it loads and plays with no connection.
  * Bump CACHE when shipping changes so phones pick up the new files. */
-const CACHE = 'solominer-v4';
+const CACHE = 'solominer-v5';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/style.css',
   './js/data.js', './js/state.js', './js/audio.js', './js/sortie.js', './js/ui.js', './js/main.js',

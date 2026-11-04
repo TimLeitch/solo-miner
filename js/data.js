@@ -90,19 +90,22 @@ SM.DATA = (function () {
   const WEAPONS = [
     { id: 'missile', name: 'Seeker missile', short: 'MSL', icon: '➶', color: '#ff9a3c',
       desc: 'Locks on to your target (or the nearest block) and blows a small crater.',
-      dmg: 45, radius: 34, ammo: 4, costs: [300, 600, 1200] },
+      dmg: 45, radius: 34, ammo: 4, reload: 30, costs: [300, 600, 1200] },
     { id: 'grenade', name: 'Space grenade', short: 'GRN', icon: '✵', color: '#57e39a',
       desc: 'Lobbed ahead of the ship, bursts after a second. Big blast, cracks whole clusters.',
-      dmg: 28, radius: 74, ammo: 3, costs: [450, 900, 1800] },
+      dmg: 28, radius: 74, ammo: 3, reload: 40, costs: [450, 900, 1800] },
     { id: 'lance', name: 'Plasma lance', short: 'LNC', icon: '⌁', color: '#a77bff',
       desc: 'Instant beam that pierces every block in a long straight line.',
-      dmg: 32, radius: 0, range: 380, ammo: 5, costs: [600, 1200, 2400] },
+      dmg: 32, radius: 0, range: 380, ammo: 5, reload: 50, costs: [600, 1200, 2400] },
     { id: 'shock', name: 'Shockwave', short: 'SHK', icon: '◎', color: '#7fe3ff',
       desc: 'Pulse around the ship. Destroys nearby debris, shorts electrical fields, hits blocks close by.',
-      dmg: 18, radius: 150, ammo: 2, costs: [350, 700, 1400] },
+      dmg: 18, radius: 150, ammo: 2, reload: 35, costs: [350, 700, 1400] },
   ];
   // Per weapon level: damage multiplier and extra ammo.
   const WEAPON_LEVEL = { dmg: 0.3, ammo: 1 };
+  // Mid-run reloads: every destroyed block adds salvage (= its material XP: rock 1, iron 2, crystal 3 ... alloy 12).
+  // Each SALVAGE_PER_SHOT points reloads 1 shot. Or buy a shot for the weapon's `reload` price in credits.
+  const SALVAGE_PER_SHOT = 8;
 
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
   const PAINTS = [
@@ -113,5 +116,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT };
 })();

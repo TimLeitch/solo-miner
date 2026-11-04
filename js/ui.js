@@ -244,14 +244,14 @@ SM.UI = (function () {
       html += `<div class="card small muted">Miner rank (Rank ${St.rank()}) is earned from mining, discoveries and contracts. Rank 3 unlocks a second contract slot; ranks also unlock shuttle paints (see Contracts tab).</div>`;
     } else if (seg === 'weapons') {
       const wp = St.get().weapons;
-      html += `<div class="card small muted">Secondary weapons fire from the orange button next to BOOST during a sortie. Buy once, then upgrade (+30% damage, +1 ammo per level). Ammo restocks free on every launch. Owning more than one adds a swap button.</div>`;
+      html += `<div class="card small muted">Secondary weapons fire from the button next to BOOST during a sortie. Buy once, then upgrade (+30% damage, +1 ammo per level). Ammo restocks free on every launch. <b>Reloading mid-run:</b> every destroyed block adds salvage (rock 1, iron 2, crystal 3, cobalt 5, iridium 8, glass 6, alloy 12) and every ${D.SALVAGE_PER_SHOT} salvage reloads 1 shot (gold ring around the button). Or tap <b>+1</b> to buy a shot with credits. Owning more than one adds a swap button.</div>`;
       D.WEAPONS.forEach(d => {
         const lv = St.weaponLvl(d.id), cost = St.weaponCost(d.id), st = St.weaponStats(d.id, Math.max(1, lv));
         const nx = lv && cost != null ? St.weaponStats(d.id, lv + 1) : null;
         const can = cost != null && St.get().credits >= cost;
         const eq = wp.equipped === d.id;
         const chips = [`Damage ${Math.round(st.dmg)}${nx ? ` &rarr; <b>${Math.round(nx.dmg)}</b>` : ''}`,
-          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`]
+          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`, `Reload ${d.reload} cr/shot`]
           .map(c => `<span class="chip">${c}</span>`).join('');
         html += `<div class="card wcard ${eq ? 'region sel' : ''}">
           <div class="row" style="justify-content:flex-start"><div class="wicon" style="color:${d.color}">${d.icon}</div>
@@ -382,6 +382,7 @@ SM.UI = (function () {
     const reasons = { return: 'Returned safely', fuel: 'Fuel empty - towed home', time: 'Shift over - autopilot home', hull: 'Hull failure - emergency return', recovered: 'Recovered from an interrupted sortie' };
     const mats = Object.keys(res.byMat).map(m => `<div class="sum"><span>${esc(D.MATERIALS[m].name)} x${res.byMat[m]}</span><span>${fmt(res.byMat[m] * D.MATERIALS[m].value)}</span></div>`).join('') || '<div class="sum muted"><span>No blocks destroyed</span><span>0</span></div>';
     let rows = mats;
+    if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;
     if (res.emergency) rows += `<div class="sum"><span>Emergency loss (kept ${Math.round(res.share * 100)}%)</span><span class="neg">-${fmt(res.raw - res.credits)}</span></div>`;
     (extra.contracts || []).forEach(c => (rows += `<div class="sum"><span>Contract: ${esc(c.title)}</span><span class="pos">+${fmt(c.paid)}</span></div>`));
     (extra.bonuses || []).forEach(b => (rows += `<div class="sum"><span>${esc(b.label)}</span><span class="pos">+${fmt(b.amount)}</span></div>`));
@@ -389,6 +390,8 @@ SM.UI = (function () {
     rows += `<div class="sum total"><span>Total banked</span><span>+${fmt(total)} cr</span></div>`;
     const repair = St.repairCost();
     const notes = [];
+    if (res.ammoWallet > 0) notes.push(`Also paid ${fmt(res.ammoWallet)} cr from your wallet for reloads.`);
+    if (res.shotsSalvaged > 0) notes.push(`Salvage reloaded ${res.shotsSalvaged} weapon shot${res.shotsSalvaged === 1 ? '' : 's'}.`);
     if (res.hullLost > 0) notes.push(`Hull damage: -${res.hullLost}. Repair quote: <b>${fmt(repair)} cr</b>.`);
     if (extra.rankUp) notes.push(`<b class="pos">Rank up! You are now Rank ${extra.rankUp}.</b>`);
     (extra.unlocked || []).forEach(r => notes.push(`<b class="pos">New field unlocked: ${esc(r.name)}!</b>`));
@@ -440,7 +443,7 @@ SM.UI = (function () {
       ${rg('stickOpacity', 'Control opacity', 0, 1, 0.1)}
       <button class="btn" id="setDone">Done</button>
       <button class="btn ghost" id="setReset" style="color:var(--danger)">Reset all progress</button>
-      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Q weapon, E swap weapon, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
+      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Q weapon, E swap weapon, X buy reload, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
     document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', () => {
       s[i.dataset.set] = i.checked; St.save(); render(); SM.Sortie.applyLayout();
     }));
