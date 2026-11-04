@@ -169,21 +169,22 @@ h3 { font-size: .95em; margin: 18px 0 8px; color: var(--muted); text-transform: 
 .caption.good { border-color: var(--good); }
 .caption.out { opacity: 0; }
 
-#controls { --ctl-opacity: .8; position: absolute; right: 12px; bottom: calc(14px + var(--safe-b)); display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; gap: 10px; align-items: end; }
+#controls { --ctl-opacity: .8; position: absolute; right: 12px; bottom: calc(14px + var(--safe-b)); display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto auto; gap: 10px; align-items: end; }
 .ctl { pointer-events: auto; touch-action: none; border-radius: 50%; border: 2px solid #fff5; color: #fff; font-weight: 900; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: var(--ctl-opacity); font-size: 14px; letter-spacing: .04em; }
 .ctl small { font-size: 9px; font-weight: 600; opacity: .8; }
-.ctl.mine { width: 96px; height: 96px; background: radial-gradient(circle, #4fb8ffcc, #1b5d8fcc); grid-column: 2; grid-row: 3; }
+.ctl.mine { width: 96px; height: 96px; background: radial-gradient(circle, #4fb8ffcc, #1b5d8fcc); grid-column: 3; grid-row: 3; }
 .ctl.mine.auto { background: radial-gradient(circle, #57e39acc, #1c7a4bcc); }
-.ctl.boost { width: 72px; height: 72px; background: radial-gradient(circle, #a77bffcc, #4d2f99cc); grid-column: 1; grid-row: 3; }
+.ctl.boost { width: 72px; height: 72px; background: radial-gradient(circle, #a77bffcc, #4d2f99cc); grid-column: 2; grid-row: 3; }
 .ctl.boost.auto { background: radial-gradient(circle, #57e39acc, #1c7a4bcc); }
 .ctl.boost.empty { filter: grayscale(1); }
-.ctl.return { grid-column: 1 / span 2; grid-row: 2; border-radius: 12px; height: 44px; width: auto; background: #ff6b6bcc; flex-direction: row; gap: 8px; justify-self: end; padding: 0 14px; }
+.ctl.return { grid-column: 1 / -1; grid-row: 2; border-radius: 12px; height: 44px; width: auto; background: #ff6b6bcc; flex-direction: row; gap: 8px; justify-self: end; padding: 0 14px; }
 .ctl.down { transform: scale(.94); filter: brightness(1.3); }
 body.lefty #controls { right: auto; left: 12px; }
 body.lefty .ctl.mine { grid-column: 1; }
 body.lefty .ctl.boost { grid-column: 2; }
+body.lefty .wpn-wrap { grid-column: 3; }
 body.lefty .ctl.return { justify-self: start; }
-.toggles { grid-column: 1 / span 2; grid-row: 1; display: flex; gap: 6px; justify-content: flex-end; }
+.toggles { grid-column: 1 / -1; grid-row: 1; display: flex; gap: 6px; justify-content: flex-end; }
 body.lefty .toggles { justify-content: flex-start; }
 .tgl { pointer-events: auto; opacity: var(--ctl-opacity); min-width: 56px; height: 44px; border-radius: 10px; border: 2px solid #fff3; background: #000a; color: var(--muted); font-weight: 900; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 6px; }
 .tgl small { font-size: 8px; font-weight: 700; }
@@ -205,3 +206,14 @@ body.in-sortie #hangar { display: none; }
 .formula { margin: 6px 0 10px; }
 .formula summary { cursor: pointer; color: var(--accent2); font-weight: 700; font-size: .9em; padding: 6px 0; }
 .sum.pos { color: var(--good); }
+
+/* secondary weapon */
+.wpn-wrap { grid-column: 1; grid-row: 3; position: relative; align-self: end; }
+.ctl.weapon { width: 66px; height: 66px; background: radial-gradient(circle, #ff9a3ccc, #8a4210cc); line-height: 1; }
+.ctl.weapon span { font-size: 18px; }
+.ctl.weapon b { font-size: 11px; }
+.ctl.weapon.empty { filter: grayscale(1); opacity: .45; }
+.swap { pointer-events: auto; position: absolute; top: -18px; right: -6px; width: 34px; height: 34px; border-radius: 50%; border: 2px solid #fff5; background: #000c; color: #fff; font-size: 15px; opacity: var(--ctl-opacity); }
+.wcard .wicon { font-size: 26px; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #0006; flex-shrink: 0; }
+.wcard .wstats { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.wcard .btns { display: flex; gap: 8px; }

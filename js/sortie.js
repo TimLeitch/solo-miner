@@ -30,6 +30,7 @@ SM.Sortie = (function () {
   function caption(text, kind) {
     if (!settings().captions && kind !== 'force') return;
     const el = $('captions');
+    if (el.lastChild && el.lastChild.textContent === text && !el.lastChild.classList.contains('out')) return; // no duplicate spam
     const d = document.createElement('div');
     d.className = 'caption ' + (kind || '');
     d.textContent = text;
@@ -138,7 +139,13 @@ SM.Sortie = (function () {
       cam: { x: world.dock.x, y: world.dock.y - 200 },
       warned: {}, tut: st.tutorial ? 0 : -1, ended: false,
       boosting: false,
+      proj: [], fx: [], ammo: {}, weapon: null,
     });
+    const wp = st.weapons;
+    Object.keys(wp.owned).forEach(id => { if (wp.owned[id]) w.ammo[id] = SM.State.weaponStats(id).ammo; });
+    w.weapon = wp.owned[wp.equipped] ? wp.equipped : (Object.keys(w.ammo)[0] || null);
+    $('wpnWrap').hidden = !w.weapon;
+    $('btnSwap').hidden = Object.keys(w.ammo).length < 2;
     input.mine = false; input.boost = false; input.stick = null;
     paused = false; running = true;
     document.body.classList.add('in-sortie');
@@ -265,6 +272,8 @@ SM.Sortie = (function () {
       el.addEventListener('pointerup', rel); el.addEventListener('pointercancel', rel); el.addEventListener('lostpointercapture', rel);
       el.addEventListener('contextmenu', e => e.preventDefault());
     }
+    $('btnWeapon').addEventListener('pointerdown', e => { e.preventDefault(); SM.Audio.unlock(); if (running && !paused) fireWeapon(); });
+    $('btnSwap').addEventListener('click', () => { SM.Audio.click(); cycleWeapon(); });
     hold('btnMine', 'mine');
     hold('btnBoost', 'boost');
     [['tglFire', 'autoFire', 'Auto-fire'], ['tglBoost', 'autoBoost', 'Auto-boost'], ['tglPilot', 'autopilot', 'Autopilot']].forEach(([id, k, label]) => {
@@ -286,6 +295,8 @@ SM.Sortie = (function () {
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.boost = true;
       if (e.code === 'Escape' || e.code === 'KeyP') pause(!paused);
       if (e.code === 'KeyR' && !paused) end('return');
+      if (e.code === 'KeyQ' && !paused) fireWeapon();
+      if (e.code === 'KeyE' && !paused) cycleWeapon();
       if (e.code === 'KeyF') $('tglFire').click();
       if (e.code === 'KeyB') $('tglBoost').click();
       if (e.code === 'KeyG') $('tglPilot').click();
@@ -485,6 +496,7 @@ SM.Sortie = (function () {
       if (w.overheated && w.heat <= S.heat * D.BASE.resumeAt) { w.overheated = false; caption('Laser cooled - mining again', 'good'); }
     }
     SM.Audio.laser(w.firing);
+    updateWeapons(dt);
 
     // debris
     w.debris.forEach(d => {
@@ -557,6 +569,123 @@ SM.Sortie = (function () {
     } else if (!w.warned.zap || w.elapsed - w.warned.zap > 1.2) {
       w.warned.zap = w.elapsed; SM.Audio.damage(); vibrate(40); caption('Electrical field - taking damage', 'danger');
     }
+  }
+
+  // ---------- secondary weapons ----------
+  function cycleWeapon() {
+    if (!w) return;
+    const ids = D.WEAPONS.map(x => x.id).filter(id => id in w.ammo);
+    if (ids.length < 2) return;
+    w.weapon = ids[(ids.indexOf(w.weapon) + 1) % ids.length];
+    const st = SM.State.get(); st.weapons.equipped = w.weapon;
+    caption(SM.State.weaponDef(w.weapon).name + ' ready');
+    hud();
+  }
+  function aimPoint() {
+    const s = w.ship;
+    const t = (w.target && w.target.alive) ? w.target : nearestBlock(400);
+    return t ? { x: t.x, y: t.y, b: t } : { x: s.x + Math.cos(s.a) * 200, y: s.y + Math.sin(s.a) * 200, b: null };
+  }
+  function fireWeapon() {
+    if (!w || !w.weapon) return;
+    const id = w.weapon, def = SM.State.weaponDef(id), ws = SM.State.weaponStats(id);
+    if (!(w.ammo[id] > 0)) { SM.Audio.deny(); caption(def.name + ' out of ammo - restocks next sortie', 'warn'); return; }
+    if (w.wcd > 0) return;
+    w.ammo[id]--; w.wcd = 0.35;
+    const s = w.ship, aim = aimPoint();
+    const a = Math.atan2(aim.y - s.y, aim.x - s.x);
+    vibrate(25);
+    if (id === 'missile') {
+      SM.Audio.launch();
+      w.proj.push({ kind: id, x: s.x, y: s.y, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, a, t: 0, target: aim.b, dmg: ws.dmg, r: ws.radius, color: def.color });
+    } else if (id === 'grenade') {
+      SM.Audio.launch();
+      const d = Math.min(240, Math.hypot(aim.x - s.x, aim.y - s.y));
+      const sp = d / 0.9; // arrives about when it detonates
+      w.proj.push({ kind: id, x: s.x, y: s.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, a, t: 0, fuse: 1.0, dmg: ws.dmg, r: ws.radius, color: def.color });
+    } else if (id === 'lance') {
+      SM.Audio.zap();
+      const len = ws.range, hit = new Set();
+      for (let d = 10; d <= len; d += 8) {
+        const x = s.x + Math.cos(a) * d, y = s.y + Math.sin(a) * d;
+        const b = w.grid.get(key(Math.floor(x / BS), Math.floor(y / BS)));
+        if (b && b.alive && !hit.has(b)) { hit.add(b); hurtBlock(b, ws.dmg); }
+      }
+      w.fx.push({ kind: 'beam', x1: s.x, y1: s.y, x2: s.x + Math.cos(a) * len, y2: s.y + Math.sin(a) * len, t: 0, life: 0.35, color: def.color });
+      if (settings().shake) w.shake = Math.max(w.shake, 3);
+    } else if (id === 'shock') {
+      SM.Audio.boom();
+      explode(s.x, s.y, ws.radius * 0.75, ws.dmg, def.color, true);
+      // knock out debris and short any electrical field in reach
+      w.debris.forEach((d, i) => {
+        if (Math.hypot(d.x - s.x, d.y - s.y) < ws.radius + d.r) {
+          for (let k = 0; k < 10; k++) w.particles.push({ x: d.x, y: d.y, vx: rand(-120, 120), vy: rand(-120, 120), t: 0, life: 0.6, color: '#ff6b6b', size: 3 });
+          w.debris[i] = newDebris(w.region, s); // respawns far away
+        }
+      });
+      w.fields.forEach(f => { if (Math.hypot(f.x - s.x, f.y - s.y) < ws.radius + f.r) f.t = 0; });
+      w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: ws.radius, t: 0, life: 0.5, color: def.color });
+    }
+    hud();
+  }
+  // weapon damage goes through block resistance just like the laser
+  function hurtBlock(b, dmg) {
+    if (!b.alive) return;
+    const m = M[b.mat];
+    b.hp -= dmg / m.res; b.flash = 0.12;
+    const prev = b.state || 0, frac = b.hp / b.maxHp;
+    b.state = frac > 0.66 ? 0 : frac > 0.33 ? 1 : 2;
+    if (b.state > prev) SM.Audio.crack();
+    if (b.hp <= 0) breakBlock(b);
+  }
+  function explode(x, y, r, dmg, color, quiet) {
+    if (!quiet) SM.Audio.boom();
+    vibrate(60);
+    if (settings().shake) w.shake = Math.max(w.shake, 7);
+    const gr = Math.ceil(r / BS) + 1, gx = Math.floor(x / BS), gy = Math.floor(y / BS);
+    const hits = [];
+    for (let dx = -gr; dx <= gr; dx++) for (let dy = -gr; dy <= gr; dy++) {
+      const b = w.grid.get(key(gx + dx, gy + dy));
+      if (!b || !b.alive) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d <= r + BS / 2) hits.push([b, d]);
+    }
+    hits.forEach(([b, d]) => hurtBlock(b, dmg * (d < r * 0.5 ? 1 : 0.6))); // full damage in the middle
+    const n = settings().reducedFx ? 10 : 34;
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(60, r * 4);
+      w.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.3, 0.7), color: i % 2 ? color : '#fff3c4', size: rand(2, 5) });
+    }
+    if (r > 0) w.fx.push({ kind: 'ring', x, y, r, t: 0, life: 0.35, color });
+  }
+  function updateWeapons(dt) {
+    if (w.wcd > 0) w.wcd -= dt;
+    w.proj = w.proj.filter(p => {
+      p.t += dt;
+      if (p.kind === 'missile') {
+        if (!p.target || !p.target.alive) p.target = nearestBlockTo(p.x, p.y, 500);
+        const sp = Math.min(520, 120 + p.t * 900);
+        if (p.target) {
+          const ta = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+          let da = ta - p.a; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+          p.a += Math.max(-7 * dt, Math.min(7 * dt, da));
+        }
+        p.vx = Math.cos(p.a) * sp; p.vy = Math.sin(p.a) * sp;
+        if (!settings().reducedFx) w.particles.push({ x: p.x, y: p.y, vx: rand(-20, 20), vy: rand(-20, 20), t: 0, life: 0.4, color: '#ffd76a', size: 2 });
+      } else { p.vx *= 1 - 1.2 * dt; p.vy *= 1 - 1.2 * dt; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const b = w.grid.get(key(Math.floor(p.x / BS), Math.floor(p.y / BS)));
+      const out = p.x < 0 || p.y < 0 || p.x > W || p.y > H;
+      const boom = (p.kind === 'missile' && (b || p.t > 3)) || (p.kind === 'grenade' && (p.t >= p.fuse || (b && p.t > 0.15)));
+      if (boom || out) { if (!out) explode(p.x, p.y, p.r, p.dmg, p.color); return false; }
+      return true;
+    });
+    w.fx = w.fx.filter(f => (f.t += dt) < f.life);
+  }
+  function nearestBlockTo(x, y, maxD) {
+    let best = null, bd = maxD;
+    for (const b of w.blocks) { if (!b.alive) continue; const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
+    return best;
   }
 
   function breakBlock(b) {
@@ -698,6 +827,35 @@ SM.Sortie = (function () {
       // direction hint
       g.strokeStyle = 'rgba(255,107,107,0.35)'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(d.x + d.vx * 0.5, d.y + d.vy * 0.5); g.stroke();
+    });
+
+    // weapon projectiles and effects
+    w.proj.forEach(p => {
+      g.save(); g.translate(p.x, p.y);
+      if (p.kind === 'missile') {
+        g.rotate(p.a); g.fillStyle = p.color; g.fillRect(-7, -2.5, 12, 5);
+        g.fillStyle = '#fff'; g.beginPath(); g.moveTo(5, -2.5); g.lineTo(9, 0); g.lineTo(5, 2.5); g.fill();
+      } else {
+        const blink = Math.floor(p.t * 10) % 2;
+        g.fillStyle = blink ? '#ffffff' : p.color; g.beginPath(); g.arc(0, 0, 5, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = p.color; g.globalAlpha = 0.35; g.setLineDash([4, 4]);
+        g.beginPath(); g.arc(0, 0, p.r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); g.globalAlpha = 1; // shows the blast zone
+      }
+      g.restore();
+    });
+    w.fx.forEach(f => {
+      const k = f.t / f.life;
+      g.globalAlpha = 1 - k;
+      if (f.kind === 'ring') {
+        g.strokeStyle = f.color; g.lineWidth = 4 * (1 - k) + 1;
+        g.beginPath(); g.arc(f.x, f.y, f.r * (0.4 + 0.6 * k), 0, Math.PI * 2); g.stroke();
+      } else if (f.kind === 'beam') {
+        g.strokeStyle = f.color; g.lineWidth = 10 * (1 - k) + 2;
+        g.beginPath(); g.moveTo(f.x1, f.y1); g.lineTo(f.x2, f.y2); g.stroke();
+        g.strokeStyle = '#fff'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(f.x1, f.y1); g.lineTo(f.x2, f.y2); g.stroke();
+      }
+      g.globalAlpha = 1;
     });
 
     // particles
@@ -846,6 +1004,13 @@ SM.Sortie = (function () {
       $('tHint').textContent = dist > S.range ? (w.autopilot ? 'Autopilot: flying to target' : 'Out of range - fly closer') : (w.overheated ? `Cooling - resumes in ${Math.max(0, (w.heat - S.heat * D.BASE.resumeAt) / S.cool).toFixed(1)}s` : `~${secs.toFixed(1)}s to break` + (m.res >= 2 ? ' - hard material, laser upgrades help' : ''));
     } else ti.hidden = true;
     $('btnBoost').classList.toggle('empty', w.energy < 5);
+    if (w.weapon) {
+      const def = SM.State.weaponDef(w.weapon), n = w.ammo[w.weapon] || 0;
+      $('wpnIcon').textContent = def.icon; $('wpnName').textContent = def.short; $('wpnAmmo').textContent = 'x' + n;
+      $('btnWeapon').style.background = `radial-gradient(circle, ${def.color}cc, #111c)`;
+      $('btnWeapon').classList.toggle('empty', n <= 0);
+      $('btnWeapon').setAttribute('aria-label', `Fire ${def.name}, ${n} left`);
+    }
   }
 
   return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w };

@@ -85,6 +85,25 @@ SM.DATA = (function () {
     repairPerHull: 1.2, // credits per hull point
   };
 
+  // Secondary weapons. Buy once, upgrade to Lv 3, ammo restocks free every sortie.
+  // dmg is raw damage before block resistance. Costs: [unlock, Lv2, Lv3].
+  const WEAPONS = [
+    { id: 'missile', name: 'Seeker missile', short: 'MSL', icon: '➶', color: '#ff9a3c',
+      desc: 'Locks on to your target (or the nearest block) and blows a small crater.',
+      dmg: 45, radius: 34, ammo: 4, costs: [300, 600, 1200] },
+    { id: 'grenade', name: 'Space grenade', short: 'GRN', icon: '✵', color: '#57e39a',
+      desc: 'Lobbed ahead of the ship, bursts after a second. Big blast, cracks whole clusters.',
+      dmg: 28, radius: 74, ammo: 3, costs: [450, 900, 1800] },
+    { id: 'lance', name: 'Plasma lance', short: 'LNC', icon: '⌁', color: '#a77bff',
+      desc: 'Instant beam that pierces every block in a long straight line.',
+      dmg: 32, radius: 0, range: 380, ammo: 5, costs: [600, 1200, 2400] },
+    { id: 'shock', name: 'Shockwave', short: 'SHK', icon: '◎', color: '#7fe3ff',
+      desc: 'Pulse around the ship. Destroys nearby debris, shorts electrical fields, hits blocks close by.',
+      dmg: 18, radius: 150, ammo: 2, costs: [350, 700, 1400] },
+  ];
+  // Per weapon level: damage multiplier and extra ammo.
+  const WEAPON_LEVEL = { dmg: 0.3, ammo: 1 };
+
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
   const PAINTS = [
     { id: 'standard', name: 'Station white', color: '#dfe6f0', rank: 1 },
@@ -94,5 +113,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL };
 })();

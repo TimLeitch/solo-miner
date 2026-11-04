@@ -25,6 +25,7 @@ SM.State = (function () {
       stats: { sorties: 0, blocks: 0, best: 0, offlineEarned: 0 },
       contracts: { offers: [], active: [], refreshedAt: 0, done: 0 },
       paint: 'standard',
+      weapons: { owned: {}, equipped: null }, // id -> level
       tutorial: true,
       lastSeen: Date.now(),
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
@@ -49,6 +50,7 @@ SM.State = (function () {
         s.settings = Object.assign(fresh().settings, parsed.settings || {});
         s.stats = Object.assign(fresh().stats, parsed.stats || {});
         s.contracts = Object.assign(fresh().contracts, parsed.contracts || {});
+        s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
         if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
       }
     } catch (e) { console.warn('Save load failed', e); }
@@ -137,6 +139,25 @@ SM.State = (function () {
     save();
     return c;
   }
+
+  // ---------- Weapons ----------
+  function weaponDef(id) { return D.WEAPONS.find(x => x.id === id); }
+  function weaponLvl(id) { return s.weapons.owned[id] || 0; }
+  function weaponStats(id, lv) {
+    const d = weaponDef(id); lv = lv || weaponLvl(id) || 1;
+    return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1), radius: d.radius, range: d.range };
+  }
+  function weaponCost(id) { const l = weaponLvl(id), d = weaponDef(id); return l < d.costs.length ? d.costs[l] : null; }
+  function buyWeapon(id) {
+    const c = weaponCost(id);
+    if (c == null || s.credits < c) return false;
+    s.credits -= c;
+    s.weapons.owned[id] = weaponLvl(id) + 1;
+    if (!s.weapons.equipped) s.weapons.equipped = id;
+    save();
+    return true;
+  }
+  function equipWeapon(id) { if (weaponLvl(id)) { s.weapons.equipped = id; save(); } }
 
   // ---------- Regions ----------
   function regionStatus(r) {
@@ -281,6 +302,7 @@ SM.State = (function () {
   return {
     load, save, reset, get, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
+    weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,
   };

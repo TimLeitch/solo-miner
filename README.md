@@ -72,6 +72,22 @@
   - Heat sink: **+25% heat capacity and +25% cooling speed per level** (was +15% capacity only), costs **80 / 200 / 450 / 1,000** (were 140 / 340 / 800 / 1,900).
   - The Upgrades screen shows the actual fire time and cool time for your current heat sink.
 
+### Secondary weapons (added 2026-11-04 at Tim's request)
+
+- **[DONE]** New **Weapons** tab in Upgrades. Buy a weapon once, upgrade it to Lv 3 (+30% damage and +1 ammo per level), and pick which one is **equipped**. Ammo restocks free on every launch.
+- **[DONE]** During a sortie the orange weapon button (next to BOOST) fires the equipped weapon and shows ammo left. The small swap button cycles between owned weapons. Desktop: Q fire, E swap.
+- **[DONE]** Weapon damage goes through block resistance like the laser, and destroyed blocks pay their normal credits.
+
+| Weapon | What it does | Damage | Area | Ammo | Cost (buy / Lv2 / Lv3) |
+| ------ | ------------ | -----: | ---- | ---: | ---------------------- |
+| Seeker missile | Homes in on your target (or the nearest block), small blast | 45 | 34 radius | 4 | 300 / 600 / 1,200 |
+| Space grenade | Lobbed toward the target, bursts after 1 s, big blast. Its blast zone is drawn while in flight | 28 | 74 radius | 3 | 450 / 900 / 1,800 |
+| Plasma lance | Instant beam that pierces every block in a straight line | 32 | 380 long | 5 | 600 / 1,200 / 2,400 |
+| Shockwave | Pulse around the ship: destroys nearby debris, resets electrical fields to dormant, damages close blocks | 18 | 150 radius | 2 | 350 / 700 / 1,400 |
+
+- **[NEEDS DECISION]** Ammo is free each sortie. Do you want ammo to cost credits instead (buy per launch), or keep it free?
+- **[TODO]** Ideas for more weapons if you want them: tractor beam (pull loose blocks), mining drone escort (auto-mines beside you), cryo charge (freeze debris).
+
 ### Checklist against the design document
 
 **Core loop & mining**
@@ -110,6 +126,7 @@
 - [DONE] "Recommended upgrade" hint on the hangar and summary screens (points at the laser if a field needs it).
 - [DONE] Visual upgrades: laser emitter grows/changes colour, armour plates at Hull 3, engine glow in hangar preview.
 - [DONE] Region unlocks by lifetime credits + laser level, exactly as the table.
+- [DONE] Secondary weapons (see *Secondary weapons* above).
 - [TODO] Cosmetic shop (only rank-unlocked paints exist).
 
 **Miner / character**

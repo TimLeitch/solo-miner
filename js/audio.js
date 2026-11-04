@@ -72,6 +72,9 @@ SM.Audio = (function () {
     alarm()    { tone(880, 0.12, 'square', 0.07); setTimeout(() => tone(660, 0.12, 'square', 0.07), 150); },
     overheat() { tone(300, 0.3, 'sawtooth', 0.08, 120); },
     contract() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => tone(f, 0.18, 'triangle', 0.13), i * 90)); },
+    launch()   { noise(0.3, 0.18, 1200); tone(300, 0.3, 'sawtooth', 0.06, 900); },
+    boom()     { noise(0.6, 0.5, 60); tone(90, 0.5, 'sine', 0.3, 40); },
+    zap()      { tone(1400, 0.25, 'sawtooth', 0.1, 200); noise(0.15, 0.15, 2000); },
     click()    { tone(1200, 0.03, 'sine', 0.06); },
   };
 })();

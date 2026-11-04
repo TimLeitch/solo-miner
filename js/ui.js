@@ -77,7 +77,8 @@ SM.UI = (function () {
 
   function affordableAny() {
     const s = St.get();
-    return [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; });
+    return [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
+      || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; });
   }
 
   function dur(ms) {
@@ -241,6 +242,28 @@ SM.UI = (function () {
       const fl = St.lvl('fscan');
       html += upgradeRow(u2, 'fscan', `Contract rewards: ${pct(S.contractBonus - 1)}` + (St.upgradeCost('fscan') == null ? '' : ` &rarr; <b>${pct(0.15 * fl)}</b>`));
       html += `<div class="card small muted">Miner rank (Rank ${St.rank()}) is earned from mining, discoveries and contracts. Rank 3 unlocks a second contract slot; ranks also unlock shuttle paints (see Contracts tab).</div>`;
+    } else if (seg === 'weapons') {
+      const wp = St.get().weapons;
+      html += `<div class="card small muted">Secondary weapons fire from the orange button next to BOOST during a sortie. Buy once, then upgrade (+30% damage, +1 ammo per level). Ammo restocks free on every launch. Owning more than one adds a swap button.</div>`;
+      D.WEAPONS.forEach(d => {
+        const lv = St.weaponLvl(d.id), cost = St.weaponCost(d.id), st = St.weaponStats(d.id, Math.max(1, lv));
+        const nx = lv && cost != null ? St.weaponStats(d.id, lv + 1) : null;
+        const can = cost != null && St.get().credits >= cost;
+        const eq = wp.equipped === d.id;
+        const chips = [`Damage ${Math.round(st.dmg)}${nx ? ` &rarr; <b>${Math.round(nx.dmg)}</b>` : ''}`,
+          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`]
+          .map(c => `<span class="chip">${c}</span>`).join('');
+        html += `<div class="card wcard ${eq ? 'region sel' : ''}">
+          <div class="row" style="justify-content:flex-start"><div class="wicon" style="color:${d.color}">${d.icon}</div>
+            <div><b>${esc(d.name)}</b> ${lv ? `<span class="small muted">Lv ${lv}/${d.costs.length}</span>` : '<span class="tag grey">LOCKED</span>'}${eq ? ' <span class="tag blue">EQUIPPED</span>' : ''}
+            <div class="small muted">${esc(d.desc)}</div></div></div>
+          <div class="wstats">${chips}</div>
+          <div class="btns">
+            ${cost == null ? '<span class="tag grey">MAX</span>' : `<button class="btn ${can ? '' : 'ghost'} small-btn" data-wbuy="${d.id}">${lv ? 'Upgrade' : 'Buy'} - ${fmt(cost)} cr</button>`}
+            ${lv && !eq ? `<button class="btn ghost small-btn" data-equip="${d.id}">Equip</button>` : ''}
+          </div>
+        </div>`;
+      });
     } else {
       const l = St.lvl('drone');
       const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
@@ -254,6 +277,12 @@ SM.UI = (function () {
       </div>`;
     }
     list.innerHTML = html;
+    list.querySelectorAll('[data-wbuy]').forEach(b => b.addEventListener('click', () => {
+      SM.Audio.unlock();
+      if (St.buyWeapon(b.dataset.wbuy)) { SM.Audio.buy(); toast(St.weaponDef(b.dataset.wbuy).name + ' ready'); render(); }
+      else { SM.Audio.deny(); toast('Not enough credits'); }
+    }));
+    list.querySelectorAll('[data-equip]').forEach(b => b.addEventListener('click', () => { St.equipWeapon(b.dataset.equip); SM.Audio.click(); render(); }));
     list.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
       SM.Audio.unlock();
       const id = b.dataset.buy;
@@ -411,7 +440,7 @@ SM.UI = (function () {
       ${rg('stickOpacity', 'Control opacity', 0, 1, 0.1)}
       <button class="btn" id="setDone">Done</button>
       <button class="btn ghost" id="setReset" style="color:var(--danger)">Reset all progress</button>
-      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
+      <p class="small muted">Desktop keys: WASD/arrows move, Space mine, Shift boost, Q weapon, E swap weapon, Tab target, F/B/G toggle auto fire/boost/pilot, R return, P pause.</p>`);
     document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', () => {
       s[i.dataset.set] = i.checked; St.save(); render(); SM.Sortie.applyLayout();
     }));
