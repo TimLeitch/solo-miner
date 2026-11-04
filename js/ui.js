@@ -95,8 +95,9 @@ SM.UI = (function () {
   function droneFormula(ds) {
     const l = St.lvl('drone');
     return `<details class="formula"><summary>How it's calculated</summary>
-      <div class="sum"><span>Drone Lv ${l} base rate</span><span>${fmt(D.DRONE.ratePerHour[l - 1])} cr/hr</span></div>
+      <div class="sum"><span>Drone Lv ${l} base rate</span><span>${fmt(St.droneBaseRate(l))} cr/hr</span></div>
       <div class="sum"><span>x Best field bonus</span><span>x${droneMult()}</span></div>
+      <div class="sum"><span>x Escort wing bonus (${St.get().wing.count} drones x ${Math.round(D.WING.offlineBonus * 100)}%)</span><span>x${(1 + D.WING.offlineBonus * St.get().wing.count).toFixed(2)}</span></div>
       <div class="sum"><span>= Rate</span><b>${fmt(ds.rate)} cr/hr</b></div>
       <div class="sum"><span>Storage = rate x ${ds.capHours}h</span><b>${fmt(ds.cap)} cr</b></div>
       <p class="small muted">Stored = min(storage, stored + rate x hours passed). The drone works in real time, whether the game is open, in the background or closed. Once storage is full it stops until you collect.</p>
@@ -204,13 +205,13 @@ SM.UI = (function () {
   // ---------- upgrades ----------
   function upgradeRow(def, id, effect) {
     const s = St.get();
-    const l = St.lvl(id), max = def.costs.length + 1, cost = St.upgradeCost(id);
-    const pips = Array.from({ length: max }, (_, i) => `<i class="${i < l ? 'on' : ''}"></i>`).join('');
+    const l = St.lvl(id), max = 5, cost = St.upgradeCost(id);
+    const pips = Array.from({ length: max }, (_, i) => `<i class="${i < ((l - 1) % max) + 1 ? 'on' : ''}"></i>`).join(''); // fills every 5 levels
     const can = cost != null && s.credits >= cost;
     const btn = cost == null ? '<span class="tag grey">MAX</span>'
       : `<button class="btn ${can ? '' : 'ghost'} small-btn buy" data-buy="${id}" ${can ? '' : 'aria-disabled="true"'}>${fmt(cost)} cr</button>`;
     return `<div class="card up">
-      <div><div class="name">${esc(def.name)} <span class="small muted">Lv ${l}/${max}</span></div><div class="pips">${pips}</div></div>
+      <div><div class="name">${esc(def.name)} <span class="small muted">Lv ${l}</span></div><div class="pips">${pips}</div></div>
       ${btn}
       <div class="eff">${effect}</div>
     </div>`;
@@ -237,9 +238,9 @@ SM.UI = (function () {
     } else if (seg === 'miner') {
       const u0 = D.MINER[0], u1 = D.MINER[1], u2 = D.MINER[2];
       const rl = St.lvl('repair');
-      html += upgradeRow(u0, 'repair', `Repair cost: -${Math.round((1 - S.repairMult) * 100)}%` + (St.upgradeCost('repair') == null ? '' : ` &rarr; <b>-${Math.min(32, rl * 8)}%</b>`));
+      html += upgradeRow(u0, 'repair', `Repair cost: -${Math.round((1 - S.repairMult) * 100)}%` + ` &rarr; <b>-${Math.round((1 - Math.pow(0.92, rl)) * 100)}%</b>`);
       const sl = St.lvl('suit');
-      html += upgradeRow(u1, 'suit', `Credits kept after hull failure: ${Math.round(S.emergencyShare * 100)}%` + (St.upgradeCost('suit') == null ? '' : ` &rarr; <b>${Math.round((D.BASE.emergencyShare + 0.05 * sl) * 100)}%</b>`));
+      html += upgradeRow(u1, 'suit', `Credits kept after hull failure: ${Math.round(S.emergencyShare * 100)}%` + ` &rarr; <b>${Math.round((1 - (1 - D.BASE.emergencyShare) * Math.pow(0.8, sl)) * 100)}%</b>`);
       const fl = St.lvl('fscan');
       html += upgradeRow(u2, 'fscan', `Contract rewards: ${pct(S.contractBonus - 1)}` + (St.upgradeCost('fscan') == null ? '' : ` &rarr; <b>${pct(0.15 * fl)}</b>`));
       html += `<h3>Spacewalk gear</h3><div class="card small muted">Tap <b>EVA</b> during a sortie to leave the ship on a tether. The hand drill <b>ignores block resistance</b> (great on cobalt, iridium and alloy), and glowing <b>relics</b> can only be picked up on foot. Oxygen refills once you're back aboard; debris and electrical fields drain it.</div>`;
@@ -266,7 +267,7 @@ SM.UI = (function () {
           .map(c => `<span class="chip">${c}</span>`).join('');
         html += `<div class="card wcard ${eq ? 'region sel' : ''}">
           <div class="row" style="justify-content:flex-start"><div class="wicon" style="color:${d.color}">${d.icon}</div>
-            <div><b>${esc(d.name)}</b> ${lv ? `<span class="small muted">Lv ${lv}/${d.costs.length}</span>` : '<span class="tag grey">LOCKED</span>'}${eq ? ' <span class="tag blue">EQUIPPED</span>' : ''}
+            <div><b>${esc(d.name)}</b> ${lv ? `<span class="small muted">Lv ${lv}</span>` : '<span class="tag grey">LOCKED</span>'}${eq ? ' <span class="tag blue">EQUIPPED</span>' : ''}
             <div class="small muted">${esc(d.desc)}</div></div></div>
           <div class="wstats">${chips}</div>
           <div class="btns">
@@ -289,7 +290,7 @@ SM.UI = (function () {
         const ds = St.droneStats(d);
         const ups = D.WING.upgrades.map(u => {
           const l = d.lv[u.id], c = St.droneUpCost(i, u.id), can = c != null && St.get().credits >= c;
-          const pips = Array.from({ length: u.costs.length + 1 }, (_, k) => `<i class="${k < l ? 'on' : ''}"></i>`).join('');
+          const pips = Array.from({ length: 5 }, (_, k) => `<i class="${k < ((l - 1) % 5) + 1 ? 'on' : ''}"></i>`).join('');
           return `<div class="dup"><div><b>${{ wlaser: 'Laser', wcool: 'Heat sink', wengine: 'Engines' }[u.id]}</b> <span class="small muted">Lv ${l}</span><div class="pips">${pips}</div></div>
             ${c == null ? '<span class="tag grey">MAX</span>' : `<button class="btn ${can ? '' : 'ghost'} small-btn" data-dup="${i}:${u.id}">${fmt(c)} cr</button>`}</div>`;
         }).join('');
@@ -310,12 +311,13 @@ SM.UI = (function () {
       const l = St.lvl('drone');
       const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
       const mult = D.DRONE.regionMult[best];
-      const nxt = l < 5 ? ` &rarr; <b>${fmt(D.DRONE.ratePerHour[l] * mult)} cr/hr, ${D.DRONE.capHours[l]}h</b>` : '';
+      const wingMult = 1 + D.WING.offlineBonus * St.get().wing.count;
+      const nxt = ` &rarr; <b>${fmt(St.droneBaseRate(l + 1) * mult * wingMult)} cr/hr, ${St.droneCapHours(l + 1)}h</b>`;
       html += upgradeRow(D.DRONE, 'drone', `${fmt(St.droneRate())} cr/hr, stores ${St.droneCap()}h (${fmt(St.droneCapCredits())} cr)` + nxt);
       const ds = St.droneStatus();
       html += `<div class="card"><div class="small muted">The drone mines in real time, even while the game is closed. Collect its storage from the hangar. Unlocking richer fields raises its rate (current field bonus: x${mult}).</div>${droneFormula(ds).replace('<details class="formula">', '<details class="formula" open>')}
-        <div class="label" style="margin-top:8px">All levels at your current field bonus</div>
-        ${D.DRONE.ratePerHour.map((r, i) => `<div class="sum ${i + 1 === l ? 'pos' : ''}"><span>Lv ${i + 1}${i + 1 === l ? ' (you)' : ''}</span><span>${fmt(r * mult)} cr/hr - ${D.DRONE.capHours[i]}h - ${fmt(r * mult * D.DRONE.capHours[i])} cr max</span></div>`).join('')}
+        <div class="label" style="margin-top:8px">Your next levels (no cap) at current bonuses</div>
+        ${[0, 1, 2, 3, 4].map(k => { const L = l + k, r = St.droneBaseRate(L) * mult * wingMult, h = St.droneCapHours(L); return `<div class="sum ${k === 0 ? 'pos' : ''}"><span>Lv ${L}${k === 0 ? ' (you)' : ''}</span><span>${fmt(r)} cr/hr - ${h}h - ${fmt(r * h)} cr max</span></div>`; }).join('')}
       </div>`;
     }
     list.innerHTML = html;

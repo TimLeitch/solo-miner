@@ -64,8 +64,8 @@ SM.DATA = (function () {
   // Escort wing: drones that fly around the ship during a sortie and mine on their own.
   // Buy up to 4; the three wing upgrades apply to every drone you own.
   const WING = {
-    max: 4,
-    buyCosts: [400, 900, 1800, 3500],
+    max: 8,
+    buyCosts: [400, 900, 1800, 3500, 6000, 10000, 16000, 25000],
     dps: 2.5,          // per drone, before block resistance (ship laser is 5)
     fireTime: 4,       // seconds of fire before a drone vents
     coolTime: 2,       // seconds to cool
@@ -155,6 +155,10 @@ SM.DATA = (function () {
   // Each SALVAGE_PER_SHOT points reloads 1 shot. Or buy a shot for the weapon's `reload` price in credits.
   const SALVAGE_PER_SHOT = 8;
 
+  // No level caps. Each table above lists the first prices; after the table runs out,
+  // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
+  const UPGRADE_GROWTH = 1.5;
+
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
   const PAINTS = [
     { id: 'standard', name: 'Station white', color: '#dfe6f0', rank: 1 },
@@ -164,5 +168,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH };
 })();

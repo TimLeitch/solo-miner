@@ -92,8 +92,8 @@ SM.State = (function () {
       scan: B.scan * shuttleMult('scanner'),
       heat: B.heat * shuttleMult('heatsink'),
       cool: B.heatCool * (1 + D.SHUTTLE.find(u => u.id === 'heatsink').coolPer * (lvl('heatsink') - 1)),
-      repairMult: Math.max(0.68, 1 - 0.08 * (lvl('repair') - 1)),
-      emergencyShare: D.BASE.emergencyShare + 0.05 * (lvl('suit') - 1),
+      repairMult: Math.pow(0.92, lvl('repair') - 1),                                    // -8% per level, compounding (never reaches zero)
+      emergencyShare: 1 - (1 - D.BASE.emergencyShare) * Math.pow(0.8, lvl('suit') - 1), // 75% -> 80% -> 84%... approaches 100%
       contractBonus: 1 + 0.15 * (lvl('fscan') - 1),
       // spacewalk
       evaSpeed: D.EVA.speed * (1 + 0.15 * (lvl('eva') - 1)),
@@ -120,10 +120,19 @@ SM.State = (function () {
   function contractSlots() { return rank() >= 3 ? 2 : 1; }
 
   // ---------- Purchases ----------
+  // Price of the next level for any upgrade table: listed prices first, then x UPGRADE_GROWTH per level.
+  function tidy(n) { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1)); return Math.round(n / p) * p; }
+  function tierCost(costs, idx) {
+    if (idx < costs.length) return costs[idx];
+    return tidy(costs[costs.length - 1] * Math.pow(D.UPGRADE_GROWTH, idx - costs.length + 1));
+  }
+  // Offline drone bay past its table: rate x1.5 per level, storage +2h per level up to 24h.
+  function droneBaseRate(l) { const t = D.DRONE.ratePerHour; return l <= t.length ? t[l - 1] : tidy(t[t.length - 1] * Math.pow(1.5, l - t.length)); }
+  function droneCapHours(l) { const t = D.DRONE.capHours; return l <= t.length ? t[l - 1] : Math.min(24, t[t.length - 1] + 2 * (l - t.length)); }
   function upgradeCost(id) {
     const def = id === 'drone' ? D.DRONE : (D.SHUTTLE.find(x => x.id === id) || D.MINER.find(x => x.id === id));
     const l = lvl(id);
-    return l - 1 < def.costs.length ? def.costs[l - 1] : null;
+    return tierCost(def.costs, l - 1);
   }
   function buy(id) {
     const c = upgradeCost(id);
@@ -166,7 +175,7 @@ SM.State = (function () {
   }
   function droneUpCost(i, id) {
     const d = s.wing.drones[i], u = D.WING.upgrades.find(x => x.id === id), l = d.lv[id];
-    return l - 1 < u.costs.length ? u.costs[l - 1] : null;
+    return tierCost(u.costs, l - 1);
   }
   function buyDroneUp(i, id) {
     const c = droneUpCost(i, id);
@@ -206,7 +215,7 @@ SM.State = (function () {
     const d = weaponDef(id); lv = lv || weaponLvl(id) || 1;
     return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1), radius: d.radius, range: d.range };
   }
-  function weaponCost(id) { const l = weaponLvl(id), d = weaponDef(id); return l < d.costs.length ? d.costs[l] : null; }
+  function weaponCost(id) { const l = weaponLvl(id), d = weaponDef(id); return tierCost(d.costs, l); }
   function buyWeapon(id) {
     const c = weaponCost(id);
     if (c == null || s.credits < c) return false;
@@ -239,9 +248,9 @@ SM.State = (function () {
   function droneRate() { // credits per hour
     const l = lvl('drone');
     const best = Math.max(0, ...s.unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-    return D.DRONE.ratePerHour[l - 1] * D.DRONE.regionMult[best] * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
+    return droneBaseRate(l) * D.DRONE.regionMult[best] * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
   }
-  function droneCap() { return D.DRONE.capHours[lvl('drone') - 1]; }
+  function droneCap() { return droneCapHours(lvl('drone')); }
   function droneCapCredits() { return droneRate() * droneCap(); }
   /* Drone storage formula (runs in real time, whether the game is open, in the background or closed):
    *   rate      = ratePerHour[droneLevel] x regionMult[best unlocked field]      (credits / hour)
@@ -361,6 +370,7 @@ SM.State = (function () {
   return {
     load, save, reset, get, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
+    tierCost, droneBaseRate, droneCapHours,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,

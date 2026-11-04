@@ -118,6 +118,16 @@
 - **[DONE]** New miner upgrades (Upgrades > Miner): **EVA mobility** (+15% speed), **Oxygen tank** (+25% oxygen), **Hand drill** (+30% drill power).
 - **[TODO]** Discovery contracts for relics, and boarding/repair events for the reinforced suit.
 
+### No level caps (added 2026-11-04 at Tim's request)
+
+- **[DONE]** Every upgrade can be bought forever: all 8 shuttle systems, all miner gear, the offline drone bay, secondary weapons and each escort drone's laser, heat sink and engines. The pips fill every 5 levels and the level number keeps counting.
+- **[DONE]** Price formula: the listed prices are used first. After that, each level costs **1.5x the previous one**, rounded to a tidy number. Example for the mining laser: 80, 200, 450, 1,000, then 1,500, 2,300, 3,400, 5,100, 7,600, 11,000, 17,000, 26,000 and so on. The knob is `UPGRADE_GROWTH` in `js/data.js`.
+- **[DONE]** Effects keep stacking linearly, e.g. laser +25% per level means Lv 13 = 20 dmg/s (4x the start). In testing, a high-level ship cleared 13 blocks in 8 seconds.
+- **[DONE]** Two stats approach 100% instead of breaking it: **Repair training** is -8% compounding (Lv 16 = -71%), and **Reinforced suit** goes 75%, 80%, 84%... toward 100%, with a 95% limit on emergency payouts.
+- **[DONE]** Offline drone bay past Lv 5: rate x1.5 per level, storage +2 h per level up to a 24 h maximum.
+- **[DONE]** Escort wing raised from 4 to **8 drones** (6,000 / 10,000 / 16,000 / 25,000 for drones 5-8).
+- **[NEEDS DECISION]** Should blocks in later fields get tougher or more valuable to keep pace with uncapped upgrades (e.g. new fields or a "prestige" reset with a permanent bonus)? Right now a maxed-out ship will make the early fields trivial, which is what you asked for.
+
 ### Checklist against the design document
 
 **Core loop & mining**
@@ -290,7 +300,7 @@ Upgrades are purchased in the hangar. Each part has multiple levels; the display
 
 **Upgrade rules:**
 
-- Most systems have five levels, with each level costing more than the last.
+- Most systems have five levels, with each level costing more than the last. *(Build note: caps removed - see "No level caps" above.)*
 - Some regions require a minimum laser level or shuttle rating. Requirements are visible before the player spends credits.
 - Major upgrades can change appearance as well as stats: upgraded emitters, reactor glow, armor plates, and engine trails.
 - A clear recommended-upgrade hint can point out a useful improvement, but purchases are always the player's choice.
