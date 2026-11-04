@@ -135,7 +135,8 @@ SM.UI = (function () {
     renderDrone();
     const r = D.REGIONS.find(x => x.id === s.region);
     $('homeRegion').textContent = r.name;
-    $('homeRegionInfo').textContent = `Hazard: ${r.hazard}`;
+    const th = St.threat();
+    $('homeRegionInfo').textContent = `Hazard: ${r.hazard} - Threat ${th.level.toFixed(1)} (blocks x${th.hp.toFixed(1)} health, x${th.value.toFixed(1)} credits)`;
     // contract
     const hc = $('homeContract');
     if (s.contracts.active.length) {
@@ -359,12 +360,15 @@ SM.UI = (function () {
   // ---------- regions ----------
   function renderRegions() {
     const s = St.get();
-    $('regionList').innerHTML = D.REGIONS.map(r => {
+    const th = St.threat();
+    const thCard = `<div class="card"><div class="row"><div><div class="label">Threat level</div><div class="big">${th.level.toFixed(2)}</div></div><div class="small muted" style="text-align:right">Blocks x${th.hp.toFixed(2)} health<br>Credits x${th.value.toFixed(2)}<br>Hazards x${th.hazard.toFixed(2)}</div></div>
+      <div class="small muted" style="margin-top:6px">Every field scales with your ship's power (laser, escort drones, weapons). Tougher blocks pay more than they slow you down, so upgrading always raises your income.</div></div>`;
+    $('regionList').innerHTML = thCard + D.REGIONS.map(r => {
       const rs = St.regionStatus(r);
       const mats = Array.from(new Set([...Object.keys(r.shell), ...Object.keys(r.core)]));
       const chips = mats.map(m => {
         const md = D.MATERIALS[m], known = s.discovered[m] || rs.unlocked;
-        return `<span class="chip"><span class="sw" style="background:${md.color}"></span>${known ? esc(md.name) + ' - ' + md.value + 'cr' : 'Unknown'}</span>`;
+        return `<span class="chip"><span class="sw" style="background:${md.color}"></span>${known ? esc(md.name) + ' - ' + fmt(md.value * th.value) + 'cr' : 'Unknown'}</span>`;
       }).join('');
       const sel = s.region === r.id;
       const recLaser = r.laser;
@@ -441,7 +445,7 @@ SM.UI = (function () {
 
   function showSummary(res, extra) {
     const reasons = { return: 'Returned safely', fuel: 'Fuel empty - towed home', time: 'Shift over - autopilot home', hull: 'Hull failure - emergency return', recovered: 'Recovered from an interrupted sortie' };
-    const mats = Object.keys(res.byMat).map(m => `<div class="sum"><span>${esc(D.MATERIALS[m].name)} x${res.byMat[m]}</span><span>${fmt(res.byMat[m] * D.MATERIALS[m].value)}</span></div>`).join('') || '<div class="sum muted"><span>No blocks destroyed</span><span>0</span></div>';
+    const mats = Object.keys(res.byMat).map(m => `<div class="sum"><span>${esc(D.MATERIALS[m].name)} x${res.byMat[m]}</span><span>${fmt(res.byMatCr ? res.byMatCr[m] || 0 : res.byMat[m] * D.MATERIALS[m].value)}</span></div>`).join('') || '<div class="sum muted"><span>No blocks destroyed</span><span>0</span></div>';
     let rows = mats;
     if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;

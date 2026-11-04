@@ -159,6 +159,13 @@ SM.DATA = (function () {
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
 
+  // Threat: fields scale with your power so they stay a challenge as you upgrade.
+  //   power  = laser multiplier + 0.5 x (escort drone laser power / ship base laser) + 0.1 x weapon levels
+  //   threat = max(1, power)
+  //   block health x threat^hp, block & relic credits x threat^value, hazards x threat^hazard
+  // value > hp, so upgrading always raises income even though blocks get tougher.
+  const THREAT = { hp: 0.85, value: 0.95, hazard: 0.5 };
+
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
   const PAINTS = [
     { id: 'standard', name: 'Station white', color: '#dfe6f0', rank: 1 },
@@ -168,5 +175,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT };
 })();

@@ -159,6 +159,17 @@ SM.State = (function () {
     return c;
   }
 
+  // ---------- Threat (field scaling) ----------
+  function threat() {
+    const S = stats();
+    const laser = S.dps / D.BASE.dps;
+    const wing = (s.wing.drones || []).reduce((a, d) => a + droneStats(d).dps, 0) / D.BASE.dps * 0.5;
+    const weap = Object.values(s.weapons.owned).reduce((a, l) => a + (l || 0), 0) * 0.1;
+    const power = laser + wing + weap;
+    const t = Math.max(1, power);
+    return { power, level: t, hp: Math.pow(t, D.THREAT.hp), value: Math.pow(t, D.THREAT.value), hazard: Math.pow(t, D.THREAT.hazard) };
+  }
+
   // ---------- Escort wing ----------
   function newDrone(laser, cool, engine) {
     return { lv: { wlaser: laser || 1, wcool: cool || 1, wengine: engine || 1 }, weapon: null, gear: null, owned: {} };
@@ -312,17 +323,17 @@ SM.State = (function () {
     if (kind === 'material') {
       const m = mats[rnd(0, mats.length - 1)];
       const n = Math.max(3, Math.round(rnd(8, 16) * 12 / Math.max(8, D.MATERIALS[m].value) * 3));
-      const reward = Math.round(n * D.MATERIALS[m].value * 0.6 / 5) * 5;
+      const reward = Math.round(n * D.MATERIALS[m].value * threat().value * 0.6 / 5) * 5;
       return { id, kind, mat: m, region: r.id, need: n, have: 0, reward, xp: 10 * tier,
         title: `Material order: ${D.MATERIALS[m].name}`, text: `Destroy ${n} ${D.MATERIALS[m].name} blocks (any sortie).` };
     }
     if (kind === 'speed') {
-      const target = [150, 450, 1100, 2500][tier - 1] + rnd(0, 4) * 25;
+      const target = Math.round(([150, 450, 1100, 2500][tier - 1] + rnd(0, 4) * 25) * threat().value / 5) * 5;
       return { id, kind, region: r.id, need: target, have: 0, reward: Math.round(target * 0.5 / 5) * 5, xp: 12 * tier,
         title: 'Speed extraction', text: `Earn ${target} credits in a single sortie in ${r.name}.` };
     }
     const blocks = rnd(8, 15);
-    return { id, kind: 'safe', region: r.id, need: blocks, have: 0, reward: [120, 350, 800, 1800][tier - 1], xp: 15 * tier,
+    return { id, kind: 'safe', region: r.id, need: blocks, have: 0, reward: Math.round([120, 350, 800, 1800][tier - 1] * threat().value / 5) * 5, xp: 15 * tier,
       title: 'Safe pilot', text: `Destroy ${blocks} blocks in ${r.name} and return without hull damage.` };
   }
   function refreshContracts(force) {
@@ -370,7 +381,7 @@ SM.State = (function () {
   return {
     load, save, reset, get, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
-    tierCost, droneBaseRate, droneCapHours,
+    tierCost, droneBaseRate, droneCapHours, threat,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,

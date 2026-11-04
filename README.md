@@ -126,7 +126,16 @@
 - **[DONE]** Two stats approach 100% instead of breaking it: **Repair training** is -8% compounding (Lv 16 = -71%), and **Reinforced suit** goes 75%, 80%, 84%... toward 100%, with a 95% limit on emergency payouts.
 - **[DONE]** Offline drone bay past Lv 5: rate x1.5 per level, storage +2 h per level up to a 24 h maximum.
 - **[DONE]** Escort wing raised from 4 to **8 drones** (6,000 / 10,000 / 16,000 / 25,000 for drones 5-8).
-- **[NEEDS DECISION]** Should blocks in later fields get tougher or more valuable to keep pace with uncapped upgrades (e.g. new fields or a "prestige" reset with a permanent bonus)? Right now a maxed-out ship will make the early fields trivial, which is what you asked for.
+- **[DONE]** Decided by Tim: fields now get tougher and richer as the ship grows (see Threat scaling below).
+
+### Threat scaling (added 2026-11-04 at Tim's request)
+
+- **[DONE]** Every field now has a **Threat level** that rises with your ship's power. It is shown in the Fields tab, on the hangar launch card and in the sortie header.
+- **[DONE]** Formula: `power = laser multiplier + 0.5 x (escort drone dps / base laser dps) + 0.1 x total weapon levels`, and `threat = max(1, power)`.
+- **[DONE]** What scales: block health x threat^0.85, credits per block x threat^0.95, debris and electrical damage x threat^0.5, debris speed up to 1.8x, and +1 debris per doubling of threat. Relics and contract rewards also pay x threat^0.95.
+- **[DONE]** Credits grow a bit faster than health, so upgrading always raises income. Test runs of 20 seconds: laser Lv 1 = threat 1.0, 37 cr; Lv 5 = threat 2.0, 90 cr; Lv 15 = threat 4.5 (blocks x3.6 health, x4.2 credits), 189 cr.
+- **[DONE]** Knobs: `THREAT` in `js/data.js` (`hp`, `value`, `hazard` exponents).
+- **[NEEDS DECISION]** Should the offline drone bay also scale with threat? Right now it does not, so offline income stays modest.
 
 ### Checklist against the design document
 

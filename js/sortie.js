@@ -13,6 +13,7 @@ SM.Sortie = (function () {
   let cb = {};                // callbacks {onEnd}
   const input = { stick: null, mine: false, boost: false, keys: {} };
   let hudTimer = 0;
+  let TH = { level: 1, hp: 1, value: 1, hazard: 1 }; // threat scaling for the current sortie
 
   const $ = id => document.getElementById(id);
 
@@ -50,7 +51,8 @@ SM.Sortie = (function () {
       const cx = gx * BS + BS / 2, cy = gy * BS + BS / 2;
       if (Math.hypot(cx - dock.x, cy - dock.y) < 150) return; // keep the dock clear
       const m = M[mat];
-      const b = { gx, gy, x: cx, y: cy, mat, maxHp: m.health, hp: m.health * (hpFrac || 1),
+      const hp = m.health * TH.hp;
+      const b = { gx, gy, x: cx, y: cy, mat, value: Math.round(m.value * TH.value), maxHp: hp, hp: hp * (hpFrac || 1),
         alive: true, seed: Math.random() * 1000, flash: 0 };
       blocks.push(b); grid.set(k, b);
     }
@@ -86,7 +88,8 @@ SM.Sortie = (function () {
     }
     // debris
     const debris = [];
-    for (let i = 0; i < region.debris.count; i++) debris.push(newDebris(region, dock));
+    const dcount = region.debris.count + Math.floor(Math.log2(TH.level));
+    for (let i = 0; i < dcount; i++) debris.push(newDebris(region, dock));
     // electrical fields
     const fields = [];
     for (let i = 0; i < region.fields; i++) {
@@ -100,7 +103,7 @@ SM.Sortie = (function () {
       const x = c.x + rand(-200, 200), y = c.y + rand(-200, 200);
       if (x < 40 || y < 40 || x > W - 40 || y > H - 300) continue;
       if (grid.has(key(Math.floor(x / BS), Math.floor(y / BS)))) continue;
-      relics.push({ x, y, value: Math.round([60, 140, 240, 380][tier] * rand(0.8, 1.3)), alive: true, t: rand(0, 6) });
+      relics.push({ x, y, value: Math.round([60, 140, 240, 380][tier] * TH.value * rand(0.8, 1.3)), alive: true, t: rand(0, 6) });
       i++;
     }
     // stars
@@ -111,7 +114,7 @@ SM.Sortie = (function () {
   function newDebris(region, dock) {
     let x, y;
     do { x = rand(60, W - 60); y = rand(60, H - 300); } while (dock && Math.hypot(x - dock.x, y - dock.y) < 400);
-    const a = rand(0, Math.PI * 2), sp = region.debris.speed * rand(0.6, 1.2);
+    const a = rand(0, Math.PI * 2), sp = region.debris.speed * Math.min(1.8, Math.pow(TH.hazard, 0.6)) * rand(0.6, 1.2);
     return { x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: rand(9, 17), rot: 0, vr: rand(-2, 2) };
   }
 
@@ -137,6 +140,7 @@ SM.Sortie = (function () {
     const st = SM.State.get();
     const region = D.REGIONS.find(r => r.id === regionId);
     const S = SM.State.stats();
+    TH = SM.State.threat();
     const world = generate(region, st.tutorial);
     w = Object.assign(world, {
       region, S,
@@ -144,7 +148,7 @@ SM.Sortie = (function () {
       hull: Math.min(st.hull, S.hull), hullStart: Math.min(st.hull, S.hull),
       fuel: S.fuel, energy: S.energy, heat: 0, overheated: false,
       time: D.BASE.sortieTime * (S.fuel / D.BASE.fuel), elapsed: 0,
-      credits: 0, byMat: {}, broken: 0, xp: 0, damaged: false,
+      credits: 0, byMat: {}, byMatCr: {}, broken: 0, xp: 0, damaged: false,
       target: null, firing: false, hitTick: 0,
       particles: [], pops: [], shake: 0,
       cam: { x: world.dock.x, y: world.dock.y - 200 },
@@ -173,7 +177,7 @@ SM.Sortie = (function () {
     $('sortie').hidden = false;
     $('pauseMenu').hidden = true;
     $('captions').innerHTML = '';
-    $('regionLabel').textContent = region.name;
+    $('regionLabel').textContent = `${region.name} - Threat ${TH.level.toFixed(1)}`;
     applyLayout();
     if (w.tut === 0) tutorialStep(0);
     else $('tutorial').hidden = true;
@@ -221,7 +225,7 @@ SM.Sortie = (function () {
       reason, region: w.region.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
       relicCount: w.relicCount, relicCredits: w.relicCredits,
       ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
-      byMat: w.byMat, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
+      byMat: w.byMat, byMatCr: w.byMatCr, threat: TH.level, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
     };
@@ -539,7 +543,7 @@ SM.Sortie = (function () {
       const dist = Math.hypot(d.x - s.x, d.y - s.y);
       if (dist < d.r + SHIP_R) {
         const nx = (s.x - d.x) / (dist || 1), ny = (s.y - d.y) / (dist || 1);
-        if (s.inv <= 0) { if (!shieldBlock()) damage(w.region.debris.dmg, 'Debris impact'); s.inv = 1; }
+        if (s.inv <= 0) { if (!shieldBlock()) damage(w.region.debris.dmg * TH.hazard, 'Debris impact'); s.inv = 1; }
         s.vx = nx * 220; s.vy = ny * 220; d.vx = -nx * Math.hypot(d.vx, d.vy); d.vy = -ny * Math.hypot(d.vx, d.vy);
         s.x = d.x + nx * (d.r + SHIP_R + 1); s.y = d.y + ny * (d.r + SHIP_R + 1);
       }
@@ -548,7 +552,7 @@ SM.Sortie = (function () {
     w.fields.forEach(f => {
       f.t = (f.t + dt) % 6.2;
       f.phase = f.t < 3 ? 0 : f.t < 4.2 ? 1 : 2;
-      if (f.phase === 2 && Math.hypot(f.x - s.x, f.y - s.y) < f.r) damage(11 * dt, null, true);
+      if (f.phase === 2 && Math.hypot(f.x - s.x, f.y - s.y) < f.r) damage(11 * TH.hazard * dt, null, true);
     });
 
     // particles / popups
@@ -995,7 +999,8 @@ SM.Sortie = (function () {
   function breakBlock(b) {
     b.alive = false; w.grid.delete(key(b.gx, b.gy));
     const m = M[b.mat];
-    w.credits += m.value; w.broken++; w.xp += m.xp;
+    w.credits += b.value; w.broken++; w.xp += m.xp;
+    w.byMatCr[b.mat] = (w.byMatCr[b.mat] || 0) + b.value;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
     addSalvage(m.xp);
     const st = SM.State.get();
@@ -1008,7 +1013,7 @@ SM.Sortie = (function () {
       const a = rand(0, Math.PI * 2), sp = rand(40, m.value >= 50 ? 200 : 130);
       w.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.4, 0.8), color: i % 3 ? m.color : '#fff', size: rand(2, 4.5) });
     }
-    w.pops.push({ x: b.x, y: b.y - 6, text: '+' + m.value, t: 0, color: '#ffd76a', size: m.value >= 50 ? 18 : 14 });
+    w.pops.push({ x: b.x, y: b.y - 6, text: '+' + b.value, t: 0, color: '#ffd76a', size: m.value >= 50 ? 18 : 14 });
     if (w.target === b) {
       w.target = settings().aimAssist ? nearestBlock(w.S.range) : null;
     }
@@ -1089,7 +1094,7 @@ SM.Sortie = (function () {
     for (const b of w.blocks) {
       if (!b.alive || b.x < vx0 || b.x > vx1 || b.y < vy0 || b.y > vy1) continue;
       if (Math.hypot(b.x - s.x, b.y - s.y) > w.S.scan) continue;
-      const v = M[b.mat].value; if (v < 12) continue;
+      const v = b.value; if (M[b.mat].value < 12) continue;
       g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(b.x - 13, b.y - BS / 2 - 9, 26, 12);
       g.fillStyle = '#ffd76a'; g.fillText(v, b.x, b.y - BS / 2 - 3);
     }
@@ -1304,7 +1309,7 @@ SM.Sortie = (function () {
       const m = M[w.target.mat];
       ti.hidden = false;
       $('tName').textContent = m.name;
-      $('tValue').textContent = m.value + ' cr';
+      $('tValue').textContent = w.target.value + ' cr';
       $('tHp').style.width = (w.target.hp / w.target.maxHp * 100) + '%';
       const dist = Math.hypot(w.target.x - w.ship.x, w.target.y - w.ship.y);
       const secs = w.target.hp * m.res / S.dps;
