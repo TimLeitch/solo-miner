@@ -68,6 +68,7 @@ SM.UI = (function () {
     document.body.classList.toggle('hc', !!s.settings.highContrast);
     document.documentElement.style.setProperty('--ui', s.settings.uiScale);
     $('upDot').hidden = !affordableAny();
+    if (SM.Cloud) SM.Cloud.refreshUi();
     $('ctDot').hidden = !(s.stats.sorties >= 1 && s.contracts.active.length < St.contractSlots() && s.contracts.offers.length);
     if (screen === 'home') renderHome();
     if (screen === 'upgrades') renderUpgrades();
@@ -160,6 +161,9 @@ SM.UI = (function () {
         <div class="rl"><span>${esc(D.REGIONS.find(x => x.id === last.region).name)}</span><span>${last.blocks} block${last.blocks === 1 ? '' : 's'}</span></div>
         <div class="rl"><span>Banked</span><b class="pos">+${fmt(last.credits)} cr</b></div>`;
     } else rec2.hidden = true;
+    const acct = SM.Cloud ? SM.Cloud.homeCardHtml() : '';
+    $('homeAccount').hidden = !acct;
+    $('homeAccount').innerHTML = acct;
     drawShipPreview();
     const lowHull = s.hull / max < 0.25;
     $('btnLaunch').textContent = lowHull ? 'REPAIR & LAUNCH' : 'LAUNCH';
@@ -494,6 +498,7 @@ SM.UI = (function () {
     const sw = (k, label, desc) => `<label class="setting"><span>${label}${desc ? `<br><span class="small muted">${desc}</span>` : ''}</span><input type="checkbox" class="switch" data-set="${k}" ${s[k] ? 'checked' : ''}></label>`;
     const rg = (k, label, min, max, step) => `<label class="setting"><span>${label}</span><input type="range" data-range="${k}" min="${min}" max="${max}" step="${step}" value="${s[k]}"></label>`;
     openModal(`<h2>Settings</h2>
+      <button class="btn ghost" data-account>Account &amp; cloud save${SM.Cloud && SM.Cloud.signedIn() ? '' : ' - sign in / sign up'}</button>
       ${rg('volume', 'Volume', 0, 1, 0.05)}
       ${sw('vibration', 'Vibration')}
       ${sw('shake', 'Screen shake')}

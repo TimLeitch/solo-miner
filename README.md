@@ -24,6 +24,8 @@
 | `js/sortie.js` | The mining run: world generation, touch stick, laser/heat, debris, electrical fields, rendering, HUD |
 | `js/ui.js` | Hangar, upgrade bay, fields, contracts, settings, summary and welcome-back screens |
 | `js/audio.js` | Synthesized sound effects (no audio files needed) |
+| `js/cloud.js` | **Accounts + cloud saves**: sign up / sign in / sign out / delete account, sync with Firebase, merging a cloud save with this device's save |
+| `js/cloud-config.js` | Firebase `apiKey` + `projectId` (public values). Empty = cloud saves off, game works exactly as before |
 | `js/main.js` | Boot, game flow, autosave, pause-on-background, crash recovery, service worker registration |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installable app (PWA) + offline caching. Bump `CACHE` in `sw.js` when you ship changes. |
 
@@ -139,6 +141,48 @@
 - **[DONE]** Knobs: `THREAT` in `js/data.js` (`hp`, `value`, `hazard` exponents).
 - **[NEEDS DECISION]** Should the offline drone bay also scale with threat? Right now it does not, so offline income stays modest.
 
+### Accounts and cloud saves (added 2026-11-05 at Tim's request)
+
+Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.
+
+- [DONE] **Backend: Firebase** (free Spark plan). Chosen over Supabase because free Supabase projects pause after a week with no traffic, which would break sign-in for a small game. Firebase Auth does the accounts; Cloud Firestore holds one save per player at `saves/{uid}`.
+- [DONE] Called over Firebase's plain REST APIs, no SDK download. The game still boots and plays fully offline; the cloud is a copy, the save on the device is always written first.
+- [DONE] Sign up, sign in, forgot password (email reset link), sign out (keep progress on this device), sign out and clear this device, delete account. Cloud button in the top bar (green = signed in, red = sync problem, gold dot = not signed in yet). Also under Settings.
+- [DONE] Hangar card "Keep your progress - Sign up" appears after the first sortie for players without an account. Signing up uploads the progress they already have.
+- [DONE] **When it syncs:** after every sortie, about every 30s while there is new progress, when the app goes to the background, when the connection comes back, and a check every 5 min for progress made on another device. An idle phone never uploads (the check ignores the drone timer and timestamps).
+- [DONE] **Merging a cloud save with a device save:**
+  - New device / no progress yet: takes the cloud save automatically.
+  - Only one side changed since the last sync: that side wins automatically (play on phone, then open on PC = PC gets the phone's progress).
+  - Both changed (played offline on two devices, or signed into an account on a device that already had its own progress): the player picks, with credits / rank / upgrades / sorties / lifetime earnings shown side by side. The one further along is highlighted.
+  - Every upload is conditional on the cloud copy being the version this device last saw, so two devices can never silently overwrite each other.
+- [DONE] The drone bay keeps earning across devices (its timer travels with the save).
+- [DONE] Tested against a mock Firebase in a headless phone browser: sign up, wrong password, new device adopts cloud save, progress moves between two devices both ways, conflict prompt, offline play then upload on reconnect, stays signed in after reload, sign out and clear. **Not yet tested against a real Firebase project** (needs your setup below).
+- [TODO] Google / Apple sign-in buttons (email + password only for now). Easy to add on Firebase if you want them.
+- [TODO] Leaderboards (the save document already stores `credits` and `rank` as fields, so this is a small step later).
+
+**[NEEDS YOU] Firebase setup (about 10 minutes, only you can do this):**
+1. Go to https://console.firebase.google.com, **Add project**, name it e.g. `solo-miner`. Google Analytics is optional (off is fine).
+2. **Build > Authentication > Get started > Sign-in method > Email/Password > Enable** (leave "Email link" off). Save.
+3. **Build > Firestore Database > Create database**, pick a location near your players, start in **production mode**.
+4. Firestore **Rules** tab, replace everything with this and **Publish**:
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /saves/{uid} {
+         allow read, delete: if request.auth != null && request.auth.uid == uid;
+         allow create, update: if request.auth != null && request.auth.uid == uid
+           && request.resource.data.data is string
+           && request.resource.data.data.size() < 200000;
+       }
+     }
+   }
+   ```
+   (Each player can only read and write their own save, and a save can't be bigger than 200 KB.)
+5. **Project settings (gear) > General > Your apps > Web (`</>`)**, register an app (no hosting needed). From the config it shows, copy `apiKey` and `projectId` into `js/cloud-config.js` (or paste them to me in the project chat and I'll commit them). These are public by design, not secrets.
+6. Recommended: in Google Cloud Console > APIs & Services > Credentials, open the "Browser key" and restrict it to HTTP referrers `https://timleitch.github.io/*` and `http://localhost:*/*`.
+7. Free tier limits: 50,000 reads and 20,000 writes per day. One active player is roughly 2 writes a minute while playing, so this covers a few hundred daily players.
+
 ### Checklist against the design document
 
 **Core loop & mining**
@@ -201,7 +245,7 @@
 - [DONE] Auto-save every 5s, after purchases and sorties, and when backgrounded. If the browser kills the game mid-sortie, those credits are banked on next launch ("Recovered" summary).
 - [DONE] First play session: guided hints (fly, tap the cracked block, hold MINE, keep mining, return) shown once; a pre-damaged rock sits near the hangar.
 - [TODO] Ambient music track, separate music/SFX volume.
-- [TODO] Cloud save / sync between devices (save lives in this browser only - clearing browser data erases it).
+- [DONE] Accounts and cloud save / sync between devices (code done, **switched off until you finish the Firebase setup** in "Accounts and cloud saves" above).
 - [TODO] Analytics for the playtest metrics listed at the bottom of this doc.
 
 ### Questions for you (please answer inline or in the project chat)
@@ -211,6 +255,7 @@
 3. **Offline gains balance** (see the two decisions above).
 4. **Sortie length** - is ~3 minutes the right feel?
 5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
+6. **Cloud saves:** finish the Firebase setup in "Accounts and cloud saves" and send me the `apiKey` + `projectId`. Also: do you want Google sign-in as well as email + password?
 
 ## Game Design Document
 

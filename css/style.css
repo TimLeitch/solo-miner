@@ -238,3 +238,17 @@ body.in-sortie #hangar { display: none; }
 .mod.on { border-color: var(--good); background: #1c7a4b55; }
 .mod.on em { color: var(--good); }
 .mod.poor { opacity: .55; }
+
+/* Account / cloud save */
+.icon-btn.acct { position: relative; color: var(--muted); }
+.icon-btn.acct.on { color: var(--good); border-color: var(--good); }
+.icon-btn.acct.warn { color: var(--danger); border-color: var(--danger); }
+.icon-btn.acct .dot { position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
+.acct-form { display: flex; flex-direction: column; gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field input { font: inherit; font-size: 16px; /* 16px stops iOS zooming in */ padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--text); min-height: 48px; }
+.field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.acct-msg:empty { display: none; }
+.acct-msg.pos { color: var(--good); }
+.acct-msg.neg { color: var(--danger); }
+.modal .card .btn { margin-top: 8px; }

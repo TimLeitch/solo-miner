@@ -26,6 +26,7 @@
         <span>Rank <b id="rank">1</b></span>
         <span class="xpbar"><i id="xpFill"></i></span>
       </button>
+      <button class="icon-btn acct" id="btnAccount" data-account aria-label="Account and cloud save">&#9729;<i class="dot" id="acctDot" hidden></i></button>
       <button class="icon-btn" id="btnSettings" aria-label="Settings">&#9881;</button>
     </header>
 
@@ -58,6 +59,7 @@
         <div class="card" id="homeContract"></div>
         <div class="card hint" id="homeHint" hidden></div>
         <div class="card recent" id="recent" hidden></div>
+        <div class="card" id="homeAccount" hidden></div>
 
         <button class="btn launch" id="btnLaunch">LAUNCH</button>
       </section>
@@ -164,6 +166,8 @@
   <script src="js/audio.js"></script>
   <script src="js/sortie.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/cloud-config.js"></script>
+  <script src="js/cloud.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

@@ -43,34 +43,71 @@ SM.State = (function () {
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        const base = fresh();
-        s = Object.assign(base, parsed);
-        s.levels = Object.assign(fresh().levels, parsed.levels || {});
-        s.settings = Object.assign(fresh().settings, parsed.settings || {});
-        s.stats = Object.assign(fresh().stats, parsed.stats || {});
-        s.contracts = Object.assign(fresh().contracts, parsed.contracts || {});
-        s.wing = Object.assign({ count: 0 }, parsed.wing || {});
-        if (!s.wing.drones) { // migrate fleet-wide upgrade levels onto each drone
-          const L = parsed.levels || {};
-          s.wing.drones = Array.from({ length: s.wing.count }, () => newDrone(L.wlaser || 1, L.wcool || 1, L.wengine || 1));
-        }
-        s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
-        if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
-      }
-    } catch (e) { console.warn('Save load failed', e); }
+      if (raw) normalize(JSON.parse(raw));
+    } catch (e) { console.warn('Save load failed', e); s = null; }
     if (!s) s = fresh();
     return s;
   }
 
-  function save() {
+  // Fill in anything missing from an older or partial save (used for local and cloud saves).
+  function normalize(parsed) {
+    const base = fresh();
+    s = Object.assign(base, parsed);
+    s.levels = Object.assign(fresh().levels, parsed.levels || {});
+    s.settings = Object.assign(fresh().settings, parsed.settings || {});
+    s.stats = Object.assign(fresh().stats, parsed.stats || {});
+    s.contracts = Object.assign(fresh().contracts, parsed.contracts || {});
+    s.wing = Object.assign({ count: 0 }, parsed.wing || {});
+    if (!s.wing.drones) { // migrate fleet-wide upgrade levels onto each drone
+      const L = parsed.levels || {};
+      s.wing.drones = Array.from({ length: s.wing.count }, () => newDrone(L.wlaser || 1, L.wcool || 1, L.wengine || 1));
+    }
+    s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
+    if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
+    return s;
+  }
+
+  // keepSeen: write to storage without moving lastSeen (used by background cloud sync so the
+  // "welcome back" offline report still measures from when the player actually left).
+  function save(keepSeen) {
     if (!s) return;
-    s.lastSeen = Date.now();
+    if (!keepSeen) s.lastSeen = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { console.warn('Save failed', e); }
   }
 
-  function reset() { s = fresh(); save(); return s; }
+  // Reset keeps the cloud account link, so the fresh save is what gets synced next.
+  function reset() { const cloud = s && s.cloud; s = fresh(); if (cloud) s.cloud = cloud; save(); return s; }
+
+  // ---------- Cloud save helpers (see js/cloud.js) ----------
+  // The part of the save that goes to the cloud: everything except per-device bookkeeping.
+  function exportSave(src) {
+    const o = JSON.parse(JSON.stringify(src || s));
+    delete o.cloud; delete o.pendingRun;
+    return o;
+  }
+  // Fingerprint of real progress. Ignores fields that tick on their own (timestamps, drone storage),
+  // so a phone sitting idle never looks like it has new progress to upload.
+  function progressHash(src) {
+    const o = exportSave(src);
+    delete o.lastSeen; delete o.drone;
+    const str = JSON.stringify(o);
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+    return h.toString(36) + ':' + str.length;
+  }
+  // Swap in a save that came from the cloud. Keeps this device's sortie recovery snapshot out of it.
+  function replace(obj, cloudLink) {
+    s = null;
+    normalize(JSON.parse(JSON.stringify(obj)));
+    if (cloudLink) s.cloud = cloudLink;
+    save();
+    return s;
+  }
+  // A save with no real progress yet (brand new player or fresh install).
+  function isFresh(src) {
+    const o = src || s;
+    return !o.lifetime && !o.xp && !(o.stats && o.stats.sorties);
+  }
   function get() { return s; }
 
   // ---------- Derived stats ----------
@@ -379,7 +416,7 @@ SM.State = (function () {
   }
 
   return {
-    load, save, reset, get, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
+    load, save, reset, get, exportSave, progressHash, replace, isFresh, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
     tierCost, droneBaseRate, droneCapHours, threat,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,

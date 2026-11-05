@@ -21,6 +21,7 @@ SM.Main = (function () {
     St.refreshContracts(false);
     St.save();
     SM.UI.goto('home');
+    SM.Cloud.init(); // signs back in from the stored session and syncs in the background (never blocks play)
     if (off) {
       if (!document.getElementById('modal').hidden) SM.UI.toast(`Drone stored +${off.gained.toLocaleString()} cr while you were away`);
       else SM.UI.showOffline(off);
@@ -31,6 +32,7 @@ SM.Main = (function () {
     setInterval(() => {
       if (document.visibilityState !== 'visible') return; // never advance lastSeen while hidden
       stashRun(); St.save();
+      SM.Cloud.tick();
     }, 5000);
     registerSW();
   }
@@ -45,6 +47,7 @@ SM.Main = (function () {
     if (document.visibilityState === 'hidden') {
       if (SM.Sortie.isRunning()) SM.Sortie.pause(true); // README: pause when the app loses focus
       stashRun(); St.save();
+      SM.Cloud.flush();
     } else {
       const off = St.collectOffline();
       St.save();
@@ -52,6 +55,7 @@ SM.Main = (function () {
         if (SM.Sortie.isRunning()) SM.UI.toast(`Drone stored +${off.gained.toLocaleString()} cr while you were away`);
         else { SM.UI.render(); SM.UI.showOffline(off); }
       }
+      SM.Cloud.sync(); // pick up progress made on another device while we were away
     }
   }
 
@@ -96,6 +100,7 @@ SM.Main = (function () {
     const rankAfter = St.rank();
     SM.UI.goto('home');
     SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0 });
+    SM.Cloud.sync();
   }
 
   function registerSW() {
