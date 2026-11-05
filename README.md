@@ -9,7 +9,8 @@
 - No build step, no dependencies. Plain HTML/CSS/JavaScript.
 - Quick look: open `index.html` directly in a browser (offline caching won't be active this way).
 - Proper (phone) testing: serve the folder over HTTP, e.g. `python3 -m http.server 8080` in this folder, then open `http://<your-computer-ip>:8080` on your phone (same Wi-Fi). On Android Chrome use **menu > Add to Home screen / Install app** to get a full-screen app icon.
-- To host for real, drop the folder on any static host (GitHub Pages, Netlify, an internal web server). Installing as an app and offline play need **HTTPS** (or localhost).
+- [DONE] **Hosting: GitHub Pages.** `.github/workflows/pages.yml` deploys the repo root on every push to `main` (no build step). Live URL once Pages is enabled: **https://timleitch.github.io/solo-miner/**. All paths (service worker, manifest, scripts) are relative, so they work under `/solo-miner/`. HTTPS from Pages is what makes install + offline play work.
+- [NEEDS DECISION] Pages on a **private** repo needs a paid GitHub plan (Pro/Team). On a free plan, make the repo public (Settings > General > Danger Zone > Change visibility). Then Settings > Pages > Build and deployment > Source: **GitHub Actions**, and re-run the "Deploy to GitHub Pages" workflow from the Actions tab.
 - Desktop keys for testing: WASD/arrows move, Space mine, Shift boost, Tab target nearest, R return, P/Esc pause.
 
 ### Files
@@ -204,7 +205,7 @@
 
 ### Questions for you (please answer inline or in the project chat)
 
-1. **Hosting:** where should this live so you can play it on your phone (GitHub Pages, internal server, something else)? HTTPS is needed for install + offline.
+1. ~~**Hosting:**~~ Answered: GitHub Pages (see How to run). Remaining step for you: enable Pages and decide public repo vs paid plan.
 2. **Native Android:** the original doc targets Android. Do you want this wrapped as a real Android app later (e.g. Capacitor/TWA), or is the browser/PWA version the goal?
 3. **Offline gains balance** (see the two decisions above).
 4. **Sortie length** - is ~3 minutes the right feel?
