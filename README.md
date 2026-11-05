@@ -62,6 +62,7 @@
 - **[DONE]** Auto-fire (on by default): the laser fires by itself at whatever is in range. No need to hold MINE.
 - **[DONE]** Auto-boost (off by default): boosts whenever you're moving and have energy. It stops at empty and restarts at 50% energy. Boosting burns more fuel.
 - **[DONE]** Autopilot (on by default, only during a sortie): when you stop steering for about half a second and nothing is in range, the ship flies itself to the next block and mines it. It goes to your tapped target first, otherwise it picks the nearest block, favouring valuable ones. It steers around debris and live electrical fields, and picks a new block if it gets stuck. Touch the stick and you're back in control instantly. A green dotted line shows where it's heading.
+- **[DONE - Tim, 2026-11-05]** Autopilot parks right next to the block it is mining (about 1.4 block widths away, `AP_CLOSE` in `js/sortie.js`) instead of hanging back at laser range, so the escort wing has more blocks within reach. In a test with 3 drones, the average distance to the target dropped from 146 to 87 units, and 8 blocks broke in 20 s instead of 5.
 - **[DECIDED - Tim, 2026-11-04]** Autopilot keeps mining until fuel or time runs out, then the automatic tow-home banks everything. It does not return early on its own.
 
 ### Laser heat (changed 2026-11-04 at Tim's request)

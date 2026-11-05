@@ -4,6 +4,7 @@ window.SM = window.SM || {};
 SM.Sortie = (function () {
   const D = SM.DATA, M = D.MATERIALS;
   const BS = 34;              // block size (world units)
+  const AP_CLOSE = BS * 1.4;  // autopilot parks this close to its target so the escort wing has blocks in reach
   const W = 1400, H = 2100;   // world size
   const SHIP_R = 13;
 
@@ -384,10 +385,11 @@ SM.Sortie = (function () {
   // Returns a steering vector {x,y} or null when the ship should hold position.
   function autopilot(dt) {
     const s = w.ship, S = w.S;
-    // already have something to shoot? hold still and mine it
-    if (w.target && w.target.alive && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range * 0.9) { w.apGoal = w.target; return avoid(0, 0); }
+    // already have something to shoot? keep mining it while easing in close,
+    // so the escort wing (which works blocks near the ship) has more to hit
+    if (w.target && w.target.alive && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range * 0.9) { w.apGoal = w.target; return closeIn(w.target); }
     const near = nearestBlock(S.range * 0.9);
-    if (near) { w.target = near; w.apGoal = near; return avoid(0, 0); }
+    if (near) { w.target = near; w.apGoal = near; return closeIn(near); }
     // pick a goal: the player's chosen target, else the best nearby block (closer and more valuable wins)
     if (!w.apGoal || !w.apGoal.alive) {
       w.apGoal = (w.target && w.target.alive) ? w.target : null;
@@ -405,11 +407,16 @@ SM.Sortie = (function () {
     if (!w.apGoal) return null; // field cleared
     w.target = w.apGoal;
     const g0 = w.apGoal, dx = g0.x - s.x, dy = g0.y - s.y, d = Math.hypot(dx, dy) || 1;
-    const stopAt = S.range * 0.7;
-    const m = Math.max(0, Math.min(1, (d - stopAt) / 80));
+    const m = Math.max(0, Math.min(1, (d - AP_CLOSE) / 80));
     // stuck against other blocks? give up on this goal and take whatever is nearest
     if (Math.hypot(s.vx, s.vy) < 12 && m > 0.5) { w.apStuck = (w.apStuck || 0) + dt; if (w.apStuck > 1.2) { w.apGoal = null; w.target = nearestBlock(400); w.apStuck = 0; } }
     else w.apStuck = 0;
+    return avoid(dx / d * m, dy / d * m);
+  }
+  // drift toward a block we're already mining until we're parked right next to it
+  function closeIn(b) {
+    const s = w.ship, dx = b.x - s.x, dy = b.y - s.y, d = Math.hypot(dx, dy) || 1;
+    const m = Math.max(0, Math.min(1, (d - AP_CLOSE) / 80)) * 0.6;
     return avoid(dx / d * m, dy / d * m);
   }
   // steer away from debris and live/arming electrical fields
