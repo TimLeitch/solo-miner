@@ -120,8 +120,9 @@ SM.State = (function () {
   }
   function stats() {
     const B = D.BASE;
+    const rankPower = 1 + D.RANK_POWER * (rank() - 1);
     return {
-      dps: B.dps * shuttleMult('laser'),
+      dps: B.dps * shuttleMult('laser') * rankPower,
       energy: B.energy * shuttleMult('reactor'),
       energyRegen: B.energyRegen * shuttleMult('reactor'),
       speed: B.speed * shuttleMult('thruster'),
@@ -137,7 +138,7 @@ SM.State = (function () {
       // spacewalk
       evaSpeed: D.EVA.speed * (1 + 0.15 * (lvl('eva') - 1)),
       evaO2: D.EVA.o2 * (1 + 0.25 * (lvl('o2') - 1)),
-      drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)),
+      drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)) * rankPower,
     };
   }
   function maxHull() { return stats().hull; }
@@ -146,15 +147,24 @@ SM.State = (function () {
     return Math.ceil(missing * D.BASE.repairPerHull * stats().repairMult);
   }
 
-  function rank() {
+  function rankXp(r) {
+    if (r <= D.RANKS.length) return D.RANKS[r - 1];
+    const n = r - D.RANKS.length;
+    return D.RANKS[D.RANKS.length - 1] + 1200 * n + 150 * n * (n - 1);
+  }
+  function rank(xp) {
+    if (xp == null) xp = s.xp;
     let r = 1;
-    for (let i = 0; i < D.RANKS.length; i++) if (s.xp >= D.RANKS[i]) r = i + 1;
+    for (let i = 0; i < D.RANKS.length; i++) if (xp >= D.RANKS[i]) r = i + 1;
+    if (r === D.RANKS.length) {
+      r += Math.floor((Math.sqrt(1050 * 1050 + 600 * (xp - D.RANKS[r - 1])) - 1050) / 300);
+    }
     return r;
   }
   function rankProgress() {
     const r = rank();
-    const lo = D.RANKS[r - 1], hi = D.RANKS[r] ?? lo;
-    return hi === lo ? 1 : (s.xp - lo) / (hi - lo);
+    const lo = rankXp(r), hi = rankXp(r + 1);
+    return (s.xp - lo) / (hi - lo);
   }
   function contractSlots() { return rank() >= 3 ? 2 : 1; }
 
@@ -442,7 +452,7 @@ SM.State = (function () {
   }
 
   return {
-    load, save, reset, get, exportSave, progressHash, replace, isFresh, lvl, stats, maxHull, repairCost, rank, rankProgress, contractSlots,
+    load, save, reset, get, exportSave, progressHash, replace, isFresh, lvl, stats, maxHull, repairCost, rank, rankXp, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
     tierCost, droneBaseRate, droneCapHours, threat,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,

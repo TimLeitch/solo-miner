@@ -200,6 +200,7 @@ SM.DATA = (function () {
   const THREAT = { hp: 0.4, value: 0.95, hazard: 0.5 };
 
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
+  const RANK_POWER = 0.05; // laser and drill power per rank after rank 1
   const PAINTS = [
     { id: 'standard', name: 'Station white', color: '#dfe6f0', rank: 1 },
     { id: 'orange',   name: 'Survey orange', color: '#ff9a3c', rank: 2 },
@@ -208,5 +209,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO };
 })();

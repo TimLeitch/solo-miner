@@ -98,3 +98,57 @@ test('laser upgrades make actual Nearside mining faster and more profitable', ()
   assert.ok(highBlocks > lowBlocks * 1.5, `${lowBlocks} -> ${highBlocks} blocks`);
   assert.ok(highCredits > lowCredits * 3, `${lowCredits} -> ${highCredits} credits`);
 });
+
+test('ranks extend past 10 with existing XP and progress at each threshold', () => {
+  const { SM } = game(5);
+  const state = SM.State.get();
+  for (let r = 1; r <= 100; r++) {
+    const xp = SM.State.rankXp(r);
+    state.xp = xp;
+    assert.equal(SM.State.rank(), r);
+    assert.equal(SM.State.rank(xp), r);
+    assert.equal(SM.State.rankProgress(), 0);
+    if (r > 1) assert.equal(SM.State.rank(xp - 1), r - 1);
+    state.xp = xp + (SM.State.rankXp(r + 1) - xp) / 2;
+    assert.equal(SM.State.rankProgress(), 0.5);
+  }
+  assert.equal(SM.State.rankXp(10), 4000);
+  assert.equal(SM.State.rankXp(11), 5200);
+  assert.equal(SM.State.rankXp(12), 6700);
+  SM.State.replace({ xp: 6700 });
+  assert.equal(SM.State.rank(), 12);
+});
+
+test('rank strengthens laser and drill, stacks with upgrades and applies on launch', () => {
+  const { SM } = game(8);
+  const state = SM.State.get();
+  state.tutorial = false;
+  state.levels.laser = 5;
+  state.levels.drill = 3;
+  const base = SM.State.stats();
+  SM.Sortie.start('nearside');
+  state.xp = SM.State.rankXp(11);
+  assert.equal(SM.Sortie._debug().S.dps, base.dps);
+  const stronger = SM.State.stats();
+  assert.ok(Math.abs(stronger.dps / base.dps - 1.5) < 1e-10);
+  assert.ok(Math.abs(stronger.drillDps / base.drillDps - 1.5) < 1e-10);
+  assert.ok(SM.State.threat().level > 1);
+  SM.Sortie.start('nearside');
+  assert.equal(SM.Sortie._debug().S.dps, stronger.dps);
+});
+
+test('higher rank improves mining speed and earnings in a sortie', () => {
+  function run(rank) {
+    const { SM, advance } = game(17);
+    SM.State.get().tutorial = false;
+    SM.State.get().xp = SM.State.rankXp(rank);
+    SM.Sortie.start('nearside');
+    const world = SM.Sortie._debug();
+    world.debris = [];
+    advance(75);
+    return world;
+  }
+  const low = run(1), high = run(30);
+  assert.ok(high.broken > low.broken, `${low.broken} -> ${high.broken} blocks`);
+  assert.ok(high.credits > low.credits, `${low.credits} -> ${high.credits} credits`);
+});

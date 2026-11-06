@@ -295,7 +295,7 @@ SM.Cloud = (function () {
   }
 
   function stat(o) {
-    const rank = (() => { let r = 1; SM.DATA.RANKS.forEach((x, i) => { if ((o.xp || 0) >= x) r = i + 1; }); return r; })();
+    const rank = St.rank(o.xp || 0);
     const lv = Object.values(o.levels || {}).reduce((a, b) => a + (b - 1), 0);
     return `<div class="sum"><span>Credits</span><b>${fmt(o.credits)} cr</b></div>
       <div class="sum"><span>Rank</span><span>${rank}</span></div>

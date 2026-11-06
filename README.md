@@ -159,7 +159,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 - **[DONE]** Every upgrade can be bought forever: all 8 shuttle systems, all miner gear, the offline drone bay, secondary weapons and each escort drone's laser, heat sink and engines. The pips fill every 5 levels and the level number keeps counting.
 - **[DONE]** Price formula: the listed prices are used first. After that, each level costs **1.5x the previous one**, rounded to a tidy number. Example for the mining laser: 80, 200, 450, 1,000, then 1,500, 2,300, 3,400, 5,100, 7,600, 11,000, 17,000, 26,000 and so on. The knob is `UPGRADE_GROWTH` in `js/data.js`.
-- **[DONE]** Effects keep stacking linearly, e.g. laser +25% per level means Lv 13 = 30 dmg/s (4x the start).
+- **[DONE]** Effects keep stacking linearly, e.g. laser +25% per level means Lv 13 = 30 dmg/s at Rank 1 (4x the start), before the separate rank bonus.
 - **[DONE]** Two stats approach 100% instead of breaking it: **Repair training** is -8% compounding (Lv 16 = -71%), and **Reinforced suit** goes 75%, 80%, 84%... toward 100%, with a 95% limit on emergency payouts.
 - **[DONE]** Offline drone bay past Lv 5: rate x1.5 per level, storage +2 h per level up to a 24 h maximum.
 - **[DONE]** Escort wing raised from 4 to **8 drones** (6,000 / 10,000 / 16,000 / 25,000 for drones 5-8).
@@ -264,6 +264,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Reinforced suit - **reinterpreted** as "+5% credits kept after hull failure" since there are no boarding events yet.
 - [DONE] Field scanner - **reinterpreted** as "+15% contract rewards" since there are no discovery objects yet.
 - [DONE] Miner rank from XP (blocks, first discoveries, contracts). Rank 3 = second contract slot; ranks 2/4/6/8 unlock shuttle paints.
+- [DONE] Miner rank has no level cap. The existing first ten thresholds are unchanged; Rank 11 starts at 5,200 XP, and each later rank requires 300 more XP than the previous one. Existing XP automatically counts toward higher ranks. Each rank after 1 adds 5% laser and hand drill power, multiplying equipment upgrades; the bonus takes effect on the next launch and laser power contributes to threat.
 - [NEEDS DECISION] Miner upgrade costs are not in the README; I used 140-2,100 cr ranges. Confirm or replace.
 - [DONE] EVA mobility, oxygen tank and hand drill (see *Spacewalk / EVA* above).
 - [TODO] Utility belt and consumables.

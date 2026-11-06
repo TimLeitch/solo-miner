@@ -253,13 +253,13 @@ SM.UI = (function () {
       const evaEff = {
         eva: l => `Speed ${Math.round(D.EVA.speed * (1 + 0.15 * (l - 1)))}`,
         o2: l => `Oxygen ${Math.round(D.EVA.o2 * (1 + 0.25 * (l - 1)))}s`,
-        drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1))).toFixed(1)} dmg/s (ignores resistance)`,
+        drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1)) * (1 + D.RANK_POWER * (St.rank() - 1))).toFixed(1)} dmg/s (ignores resistance)`,
       };
       ['eva', 'o2', 'drill'].forEach(id => {
         const u = D.MINER.find(x => x.id === id), l = St.lvl(id);
         html += upgradeRow(u, id, evaEff[id](l) + (St.upgradeCost(id) == null ? '' : ` &rarr; <b>${evaEff[id](l + 1)}</b>`));
       });
-      html += `<div class="card small muted">Miner rank (Rank ${St.rank()}) is earned from mining, discoveries and contracts. Rank 3 unlocks a second contract slot; ranks also unlock shuttle paints (see Contracts tab).</div>`;
+      html += `<div class="card small muted">Miner rank (Rank ${St.rank()}) is earned from mining, discoveries and contracts. Each rank after 1 adds ${Math.round(D.RANK_POWER * 100)}% laser and drill power, applied on the next launch. Rank 3 unlocks a second contract slot; ranks also unlock shuttle paints (see Contracts tab).</div>`;
     } else if (seg === 'weapons') {
       const wp = St.get().weapons;
       html += `<div class="card small muted">Secondary weapons fire from the button next to BOOST during a sortie. Buy once, then upgrade (+30% damage, +1 ammo per level). Ammo restocks free on every launch. <b>Reloading mid-run:</b> every destroyed block adds salvage (rock 1, iron 2, crystal 3, cobalt 5, iridium 8, glass 6, alloy 12) and every ${D.SALVAGE_PER_SHOT} salvage reloads 1 shot (gold ring around the button). Or tap <b>+1</b> to buy a shot with credits. Owning more than one adds a swap button.</div>`;
@@ -407,7 +407,7 @@ SM.UI = (function () {
     const s = St.get();
     const th = St.threat();
     const thCard = `<div class="card"><div class="row"><div><div class="label">Threat level</div><div class="big">${th.level.toFixed(2)}</div></div><div class="small muted" style="text-align:right">Blocks x${th.hp.toFixed(2)} health<br>Credits x${th.value.toFixed(2)}<br>Hazards x${th.hazard.toFixed(2)}</div></div>
-      <div class="small muted" style="margin-top:6px">Fields change each launch. Power (laser, escort drones, weapons) makes blocks richer and hazards stronger; laser upgrades outpace block health so mining gets faster.</div></div>`;
+      <div class="small muted" style="margin-top:6px">Fields change each launch. Power (rank, laser, escort drones, weapons) makes blocks richer and hazards stronger; laser upgrades outpace block health so mining gets faster.</div></div>`;
     $('regionList').innerHTML = thCard + D.REGIONS.map(r => {
       const rs = St.regionStatus(r);
       const mats = Array.from(new Set([...Object.keys(r.shell), ...Object.keys(r.core)]));
@@ -464,7 +464,8 @@ SM.UI = (function () {
     }
     // rank rewards
     const r = St.rank();
-    let rr = `<div class="card"><div class="small">Rank ${r} - ${fmt(s.xp)} XP${D.RANKS[r] ? ` (next at ${fmt(D.RANKS[r])})` : ' (max)'}</div>`;
+    let rr = `<div class="card"><div class="small">Rank ${r} - ${fmt(s.xp)} XP (next at ${fmt(St.rankXp(r + 1))})</div>
+      <div class="small muted">Rank bonus: +${Math.round((r - 1) * D.RANK_POWER * 100)}% laser and drill power. Each rank adds ${Math.round(D.RANK_POWER * 100)}%.</div>`;
     rr += `<div class="small muted" style="margin:6px 0">Rank 3: second contract slot ${r >= 3 ? '&#10003;' : ''}</div>`;
     rr += '<div class="mats" style="display:flex;flex-wrap:wrap;gap:6px">' + D.PAINTS.map(p => {
       const ok = r >= p.rank, sel = s.paint === p.id;
@@ -507,7 +508,7 @@ SM.UI = (function () {
     if (extra.autoRepair) notes.push(`Dock repair crew fixed ${extra.autoRepair.pts} hull for ${fmt(extra.autoRepair.cost)} cr.`);
     if (res.shotsSalvaged > 0) notes.push(`Salvage reloaded ${res.shotsSalvaged} weapon shot${res.shotsSalvaged === 1 ? '' : 's'}.`);
     if (res.hullLost > 0) notes.push(`Hull damage: -${res.hullLost}. Repair quote: <b>${fmt(repair)} cr</b>.`);
-    if (extra.rankUp) notes.push(`<b class="pos">Rank up! You are now Rank ${extra.rankUp}.</b>`);
+    if (extra.rankUp) notes.push(`<b class="pos">Rank up! You are now Rank ${extra.rankUp}, with +${Math.round((extra.rankUp - 1) * D.RANK_POWER * 100)}% laser and drill power.</b>`);
     (extra.unlocked || []).forEach(r => notes.push(`<b class="pos">New field unlocked: ${esc(r.name)}!</b>`));
     const rec = recommended();
     if (rec) notes.push(`You can afford: <b>${esc(rec.name)}</b> ${esc(rec.why)}`);
