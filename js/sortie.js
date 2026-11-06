@@ -975,8 +975,8 @@ SM.Sortie = (function () {
     return n;
   }
   // How good a shot with weapon id would be right now. >= 1 means "worth the ammo".
-  //   missile: target needs more than 2.5 s of laser time  -> secs / 2.5
-  //   grenade: blocks inside the blast where it will land   -> count / 4
+  //   missile: target needs more than 2 s of laser time    -> secs / 2
+  //   grenade: blocks inside the blast where it will land   -> count / 3
   //   lance:   blocks along the beam                        -> count / 3
   //   shock:   debris about to hit = 3, live field on us = 2, else blocks in reach / 5
   function shotScore(id) {
@@ -984,12 +984,12 @@ SM.Sortie = (function () {
     if (id === 'missile') {
       const t = aim.b;
       if (!t || Math.hypot(t.x - s.x, t.y - s.y) > S.range * 2) return 0;
-      return t.hp * M[t.mat].res / S.dps / 2.5;
+      return t.hp * M[t.mat].res / S.dps / 2;
     }
     if (id === 'grenade') {
       if (!aim.b) return 0;
       const a = Math.atan2(aim.y - s.y, aim.x - s.x), d = Math.min(240, Math.hypot(aim.x - s.x, aim.y - s.y));
-      return blocksNear(s.x + Math.cos(a) * d, s.y + Math.sin(a) * d, ws.radius) / 4;
+      return blocksNear(s.x + Math.cos(a) * d, s.y + Math.sin(a) * d, ws.radius) / 3;
     }
     if (id === 'lance') {
       if (!aim.b) return 0;
@@ -1011,8 +1011,9 @@ SM.Sortie = (function () {
     if (!w.weapon || w.tut === 0) return;
     const St = SM.State, loaded = id => w.ammo[id] > 0;
     w.autoCd -= dt; w.loadCd -= dt;
-    // weapon selector: current weapon empty -> switch to one that still has ammo (doesn't change your saved pick)
-    if (!loaded(w.weapon) && St.autoOn('selector')) {
+    // current weapon empty -> switch to one that still has ammo (doesn't change your saved pick).
+    // The weapon selector does this on its own; the fire-control computer has it built in.
+    if (!loaded(w.weapon) && (St.autoOn('selector') || St.autoOn('fcs'))) {
       const next = D.WEAPONS.map(x => x.id).find(id => loaded(id));
       if (next) { w.weapon = next; caption(St.weaponDef(next).name + ' selected (empty weapon swapped)'); hud(); }
     }
@@ -1023,10 +1024,15 @@ SM.Sortie = (function () {
     }
     // fire-control computer
     if (!St.autoOn('fcs') || w.autoCd > 0 || w.eva || w.wcd > 0) return;
-    const ids = St.autoOn('selector') ? D.WEAPONS.map(x => x.id).filter(loaded) : (loaded(w.weapon) ? [w.weapon] : []);
+    // every loaded weapon is considered; the best-fitting shot wins (ties go to the weapon with more ammo left)
+    const ids = D.WEAPONS.map(x => x.id).filter(loaded);
     let best = null, bestScore = 1;
-    ids.forEach(id => { const sc = shotScore(id); if (sc >= bestScore) { best = id; bestScore = sc; } });
+    ids.forEach(id => {
+      const sc = shotScore(id) + w.ammo[id] * 0.01;
+      if (sc >= bestScore) { best = id; bestScore = sc; }
+    });
     if (!best) { w.autoCd = 0.25; return; } // check again shortly
+    if (best !== w.weapon) caption(St.weaponDef(best).name + ' selected');
     w.weapon = best;
     if (fireWeapon()) { w.autoShots++; w.autoCd = St.fcsDelay(); }
   }

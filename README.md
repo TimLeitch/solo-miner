@@ -102,21 +102,22 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 | Module | What it does | Cost | Levels |
 | ------ | ------------ | ---- | ------ |
-| Fire-control computer | Fires your secondary weapon by itself when the shot is worth it (rules below). A **WPN** auto toggle appears next to FIRE/BOOST/PILOT in the sortie (key H). | 500 / 1,200 / 2,800, then x1.5 | No cap. Wait between auto-shots: 3.0 s x 0.8 per level, never under 0.6 s |
-| Weapon selector | When your weapon runs dry, switches to one that still has ammo. With the fire-control computer, it picks the best weapon for each shot. Auto-switches don't change your saved equipped weapon. | 350 | One-time |
+| Fire-control computer | Fires your weapons by itself when the shot is worth it, switching to whichever owned weapon fits best and away from empty ones (rules below). A **WPN** auto toggle appears next to FIRE/BOOST/PILOT in the sortie (key H). | 500 / 1,200 / 2,800, then x1.5 | No cap. Wait between auto-shots: 3.0 s x 0.8 per level, never under 0.6 s |
+| Weapon selector | When your weapon runs dry, switches to one that still has ammo, even with the fire-control computer off (for manual firing). Auto-switches don't change your saved equipped weapon. | 350 | One-time |
 | Ammo autoloader | When the weapon is empty (and the selector has nothing loaded to switch to), buys a shot automatically. **Only pays from that sortie's credits, never your wallet.** Each level makes every reload 10% cheaper, manual +1 too. | 400 / 1,000 / 2,400, then x1.5 | No cap (discount compounds: 10%, 19%, 27%...) |
 | Ammo racks | +1 starting ammo on every weapon per level. | 300 / 750 / 1,800, then x1.5 | No cap |
 | Dock repair crew | Repairs the hull automatically when you return from a sortie, from the wallet (partial repair if short). | 250 | One-time |
 
 - **[DONE]** Fire-control rules (a shot fires when its score is 1 or more; the highest score wins):
-  - Seeker missile: the target needs more than 2.5 s of laser time (score = seconds / 2.5).
-  - Space grenade: 4+ blocks inside the blast where it will land (score = blocks / 4).
+  - Seeker missile: the target needs more than 2 s of laser time (score = seconds / 2).
+  - Space grenade: 3+ blocks inside the blast where it will land (score = blocks / 3).
   - Plasma lance: 3+ blocks along the beam (score = blocks / 3).
   - Shockwave: debris about to hit you (score 3), an electrical field warming up or live on you (score 2), or 5+ blocks close by.
   - It does not fire during the first-flight tutorial or while you're on a spacewalk.
+  - **[FIXED - Tim, 2026-11-06]** Tim saw it never switch weapons. Cause: switching needed the separate Weapon selector. The computer now always weighs every loaded weapon, switches to the best fit (ties go to the one with more ammo), and swaps away from empty weapons on its own. Missile and grenade thresholds were lowered (2 s, 3 blocks) so the other weapons come into play more often.
 - **[DONE]** The sortie summary reports auto-shots fired, shots the autoloader bought, and what the dock crew repaired.
 - **[DONE]** Tested in a 390x844 phone viewport: an old save loads with no modules; with all modules bought the computer fired 8 shots in 26 s and switched weapons by situation; with every weapon empty the autoloader bought a shot once sortie credits covered it and the wallet stayed untouched; the dock crew repaired 60 hull on return.
-- **[NEEDS DECISION]** Prices and the 2.5 s / 4-block / 3-block thresholds are my first guesses. Should the autoloader be allowed to dip into the wallet (as manual +1 does)? Should ammo racks or the fire-control computer count toward Threat (right now they don't)?
+- **[NEEDS DECISION]** Prices and the 2 s / 3-block / 3-block thresholds are my first guesses. Should the autoloader be allowed to dip into the wallet (as manual +1 does)? Should ammo racks or the fire-control computer count toward Threat (right now they don't)?
 - **[TODO]** Other "auto" ideas if you want them: auto-spacewalk to grab relics, auto-collect the drone bay on launch, auto-return when hull is low.
 
 ### Escort wing (added 2026-11-04 at Tim's request)

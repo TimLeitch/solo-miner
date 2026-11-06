@@ -165,9 +165,9 @@ SM.DATA = (function () {
     loaderStep: 0.9,
     modules: [
       { id: 'fcs', name: 'Fire-control computer', icon: '⌖', costs: [500, 1200, 2800], max: null, toggle: true,
-        desc: 'Fires your secondary weapon by itself when the shot is worth it: missiles at tough blocks, grenades and lances into crowds, shockwave when debris gets close.' },
+        desc: 'Fires your weapons by itself when the shot is worth it, switching to whichever weapon fits: missiles at tough blocks, grenades and lances into crowds, shockwave when debris gets close. Swaps away from empty weapons.' },
       { id: 'selector', name: 'Weapon selector', icon: '⇄', costs: [350], max: 1, toggle: true,
-        desc: 'Switches to a loaded weapon when the current one runs dry. With the fire-control computer, it picks the best weapon for each shot.' },
+        desc: 'Switches to a loaded weapon when the current one runs dry, even with the fire-control computer off (for manual firing).' },
       { id: 'loader', name: 'Ammo autoloader', icon: '↻', costs: [400, 1000, 2400], max: null, toggle: true,
         desc: 'Buys a shot automatically when your weapon is empty, paid only from this sortie\'s credits (never your wallet). Each level makes every reload 10% cheaper.' },
       { id: 'racks', name: 'Ammo racks', icon: '≡', costs: [300, 750, 1800], max: null, toggle: false,
