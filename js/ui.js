@@ -407,7 +407,7 @@ SM.UI = (function () {
     const s = St.get();
     const th = St.threat();
     const thCard = `<div class="card"><div class="row"><div><div class="label">Threat level</div><div class="big">${th.level.toFixed(2)}</div></div><div class="small muted" style="text-align:right">Blocks x${th.hp.toFixed(2)} health<br>Credits x${th.value.toFixed(2)}<br>Hazards x${th.hazard.toFixed(2)}</div></div>
-      <div class="small muted" style="margin-top:6px">Every field scales with your ship's power (laser, escort drones, weapons). Tougher blocks pay more than they slow you down, so upgrading always raises your income.</div></div>`;
+      <div class="small muted" style="margin-top:6px">Fields change each launch. Power (laser, escort drones, weapons) makes blocks richer and hazards stronger; laser upgrades outpace block health so mining gets faster.</div></div>`;
     $('regionList').innerHTML = thCard + D.REGIONS.map(r => {
       const rs = St.regionStatus(r);
       const mats = Array.from(new Set([...Object.keys(r.shell), ...Object.keys(r.core)]));

@@ -66,7 +66,7 @@ SM.DATA = (function () {
   const WING = {
     max: 8,
     buyCosts: [400, 900, 1800, 3500, 6000, 10000, 16000, 25000],
-    dps: 2.5,          // per drone, before block resistance (ship laser is 5)
+    dps: 2.5,          // per drone, before block resistance
     fireTime: 4,       // seconds of fire before a drone vents
     coolTime: 2,       // seconds to cool
     speed: 170, reach: 190, // reach = how far from the ship a drone will go to mine
@@ -128,7 +128,7 @@ SM.DATA = (function () {
 
   // Base shuttle stats (level 1).
   const BASE = {
-    dps: 5,            // laser damage per second before resistance
+    dps: 7.5,          // laser damage per second before resistance
     energy: 100, energyRegen: 9, boostDrain: 28,
     speed: 150, boostMult: 1.9,
     fuel: 100, fuelBurn: 0.55, // fuel per second at full thrust
@@ -196,8 +196,8 @@ SM.DATA = (function () {
   //   power  = laser multiplier + 0.5 x (escort drone laser power / ship base laser) + 0.1 x weapon levels
   //   threat = max(1, power)
   //   block health x threat^hp, block & relic credits x threat^value, hazards x threat^hazard
-  // value > hp, so upgrading always raises income even though blocks get tougher.
-  const THREAT = { hp: 0.85, value: 0.95, hazard: 0.5 };
+  // Health grows slower than mining power, so familiar fields become faster to mine.
+  const THREAT = { hp: 0.4, value: 0.95, hazard: 0.5 };
 
   const RANKS = [0, 40, 120, 260, 480, 800, 1250, 1900, 2800, 4000];
   const PAINTS = [

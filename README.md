@@ -124,7 +124,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 - **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. They work blocks within reach of the ship (190 at base) as a team (see below), fly next to them and mine with their own lasers. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
 - **[DONE]** **Every drone has its own loadout** (Upgrades > Drones, one card per drone). Existing saves carry their old fleet-wide levels over to each drone.
-  - Own upgrades, 5 levels each: **Laser** +30% power (250 / 600 / 1,300 / 2,800), **Heat sink** +30% fire time (200 / 500 / 1,100 / 2,400), **Engines** +20% speed and reach (200 / 500 / 1,100 / 2,400). Base: 2.5 dmg/s, fires 4 s then cools 2 s, reach 190. Your ship laser is 5 dmg/s.
+  - Own upgrades, 5 levels each: **Laser** +30% power (250 / 600 / 1,300 / 2,800), **Heat sink** +30% fire time (200 / 500 / 1,100 / 2,400), **Engines** +20% speed and reach (200 / 500 / 1,100 / 2,400). Base: 2.5 dmg/s, fires 4 s then cools 2 s, reach 190. Your base ship laser is 7.5 dmg/s.
   - **Weapon slot** (buy once per drone, then equip freely):
     - Mini-missile pod (500 cr): fires a small seeker at the drone's block every 5 s, 6 per sortie, 22 damage, small blast.
     - Flak gun (400 cr): every 2.5 s shoots down debris that gets within 150 of you or the drone.
@@ -159,7 +159,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 - **[DONE]** Every upgrade can be bought forever: all 8 shuttle systems, all miner gear, the offline drone bay, secondary weapons and each escort drone's laser, heat sink and engines. The pips fill every 5 levels and the level number keeps counting.
 - **[DONE]** Price formula: the listed prices are used first. After that, each level costs **1.5x the previous one**, rounded to a tidy number. Example for the mining laser: 80, 200, 450, 1,000, then 1,500, 2,300, 3,400, 5,100, 7,600, 11,000, 17,000, 26,000 and so on. The knob is `UPGRADE_GROWTH` in `js/data.js`.
-- **[DONE]** Effects keep stacking linearly, e.g. laser +25% per level means Lv 13 = 20 dmg/s (4x the start). In testing, a high-level ship cleared 13 blocks in 8 seconds.
+- **[DONE]** Effects keep stacking linearly, e.g. laser +25% per level means Lv 13 = 30 dmg/s (4x the start).
 - **[DONE]** Two stats approach 100% instead of breaking it: **Repair training** is -8% compounding (Lv 16 = -71%), and **Reinforced suit** goes 75%, 80%, 84%... toward 100%, with a 95% limit on emergency payouts.
 - **[DONE]** Offline drone bay past Lv 5: rate x1.5 per level, storage +2 h per level up to a 24 h maximum.
 - **[DONE]** Escort wing raised from 4 to **8 drones** (6,000 / 10,000 / 16,000 / 25,000 for drones 5-8).
@@ -169,8 +169,9 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 - **[DONE]** Every field now has a **Threat level** that rises with your ship's power. It is shown in the Fields tab, on the hangar launch card and in the sortie header.
 - **[DONE]** Formula: `power = laser multiplier + 0.5 x (escort drone dps / base laser dps) + 0.1 x total weapon levels`, and `threat = max(1, power)`.
-- **[DONE]** What scales: block health x threat^0.85, credits per block x threat^0.95, debris and electrical damage x threat^0.5, debris speed up to 1.8x, and +1 debris per doubling of threat. Relics and contract rewards also pay x threat^0.95.
-- **[DONE]** Credits grow a bit faster than health, so upgrading always raises income. Test runs of 20 seconds: laser Lv 1 = threat 1.0, 37 cr; Lv 5 = threat 2.0, 90 cr; Lv 15 = threat 4.5 (blocks x3.6 health, x4.2 credits), 189 cr.
+- **[DONE]** What scales: block health x threat^0.4, credits per block x threat^0.95, debris and electrical damage x threat^0.5, debris speed up to 1.8x, and +1 debris per doubling of threat. Relics and contract rewards also pay x threat^0.95.
+- **[DONE]** The base laser deals 7.5 damage/s. Block health grows more slowly than laser power: with only a Lv 15 laser, Nearside blocks have about 1.8x health but the laser has 4.5x power, so the same material takes about 41% as long to mine and pays about 4.2x as much.
+- **[DONE]** Every launch generates a fresh layout, with larger irregular clusters and more mineable blocks. The dock stays clear and the tutorial retains its damaged starter block.
 - **[DONE]** Knobs: `THREAT` in `js/data.js` (`hp`, `value`, `hazard` exponents).
 - **[NEEDS DECISION]** Should the offline drone bay also scale with threat? Right now it does not, so offline income stays modest.
 

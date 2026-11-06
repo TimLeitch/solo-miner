@@ -61,13 +61,13 @@ SM.Sortie = (function () {
     for (let c = 0; c < region.clusters; c++) {
       let cx, cy, tries = 0;
       do {
-        cx = rand(160, W - 160); cy = rand(160, H - 420); tries++;
-      } while (tries < 40 && centers.some(p => Math.hypot(p.x - cx, p.y - cy) < 260));
+        cx = rand(240, W - 240); cy = rand(240, H - 460); tries++;
+      } while (tries < 40 && centers.some(p => Math.hypot(p.x - cx, p.y - cy) < 350));
       centers.push({ x: cx, y: cy });
-      const R = rand(2, 4.3);
+      const R = rand(4, 6.5);
       const gcx = Math.round(cx / BS), gcy = Math.round(cy / BS);
       const wob = [rand(0, 6), rand(0.3, 0.9), rand(0, 6), rand(0.2, 0.6)];
-      for (let dx = -5; dx <= 5; dx++) for (let dy = -5; dy <= 5; dy++) {
+      for (let dx = -8; dx <= 8; dx++) for (let dy = -8; dy <= 8; dy++) {
         const a = Math.atan2(dy, dx);
         const edge = R * (1 + 0.22 * Math.sin(a * 3 + wob[0]) * wob[1] + 0.15 * Math.sin(a * 5 + wob[2]) * wob[3]);
         const d = Math.hypot(dx, dy);
