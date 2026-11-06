@@ -26,6 +26,7 @@ SM.State = (function () {
       contracts: { offers: [], active: [], refreshedAt: 0, done: 0 },
       paint: 'standard',
       weapons: { owned: {}, equipped: null }, // id -> level
+      auto: { lv: {}, on: {} },                // ship automation modules: id -> level, id -> switched on
       wing: { count: 0, drones: [] },          // escort drones and their loadouts
       tutorial: true,
       lastSeen: Date.now(),
@@ -63,6 +64,7 @@ SM.State = (function () {
       s.wing.drones = Array.from({ length: s.wing.count }, () => newDrone(L.wlaser || 1, L.wcool || 1, L.wengine || 1));
     }
     s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
+    s.auto = Object.assign({ lv: {}, on: {} }, parsed.auto || {}); // older saves: nothing bought
     if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
     return s;
   }
@@ -261,7 +263,7 @@ SM.State = (function () {
   function weaponLvl(id) { return s.weapons.owned[id] || 0; }
   function weaponStats(id, lv) {
     const d = weaponDef(id); lv = lv || weaponLvl(id) || 1;
-    return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1), radius: d.radius, range: d.range };
+    return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1) + autoLvl('racks'), radius: d.radius, range: d.range };
   }
   function weaponCost(id) { const l = weaponLvl(id), d = weaponDef(id); return tierCost(d.costs, l); }
   function buyWeapon(id) {
@@ -274,6 +276,30 @@ SM.State = (function () {
     return true;
   }
   function equipWeapon(id) { if (weaponLvl(id)) { s.weapons.equipped = id; save(); } }
+
+  // ---------- Ship automation (DATA.AUTO) ----------
+  function autoDef(id) { return D.AUTO.modules.find(m => m.id === id); }
+  function autoLvl(id) { return (s.auto && s.auto.lv[id]) || 0; }           // 0 = not bought
+  function autoOn(id) { return autoLvl(id) > 0 && s.auto.on[id] !== false; } // owned and switched on
+  function autoCost(id) { const d = autoDef(id), l = autoLvl(id); return d.max != null && l >= d.max ? null : tierCost(d.costs, l); }
+  function buyAuto(id) {
+    const c = autoCost(id);
+    if (c == null || s.credits < c) return false;
+    s.credits -= c; s.auto.lv[id] = autoLvl(id) + 1;
+    if (s.auto.on[id] == null) s.auto.on[id] = true;
+    save(); return true;
+  }
+  function toggleAuto(id, on) { if (!autoLvl(id)) return; s.auto.on[id] = on == null ? !autoOn(id) : !!on; save(); }
+  // Credits for one bought shot of weapon id (autoloader levels make it cheaper).
+  function reloadCost(id, lv) {
+    const l = lv == null ? autoLvl('loader') : lv;
+    return Math.max(1, Math.round(weaponDef(id).reload * Math.pow(D.AUTO.loaderStep, Math.max(0, l - 1))));
+  }
+  // Seconds the fire-control computer waits between automatic shots.
+  function fcsDelay(lv) {
+    const l = lv == null ? autoLvl('fcs') : lv;
+    return Math.max(D.AUTO.fcsMin, D.AUTO.fcsDelay * Math.pow(D.AUTO.fcsStep, Math.max(0, l - 1)));
+  }
 
   // ---------- Regions ----------
   function regionStatus(r) {
@@ -421,6 +447,7 @@ SM.State = (function () {
     tierCost, droneBaseRate, droneCapHours, threat,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
+    autoDef, autoLvl, autoOn, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,
   };

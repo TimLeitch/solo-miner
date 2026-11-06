@@ -155,6 +155,28 @@ SM.DATA = (function () {
   // Each SALVAGE_PER_SHOT points reloads 1 shot. Or buy a shot for the weapon's `reload` price in credits.
   const SALVAGE_PER_SHOT = 8;
 
+  // Ship automation (added 2026-11-06 at Tim's request): modules that use weapons and handle ammo for you.
+  // Bought in Upgrades > Weapons. Each has an on/off switch once owned (s.auto.on). max: null = no level cap.
+  //   fcs      Lv n: waits fcsDelay x fcsStep^(n-1) seconds between automatic shots (never below fcsMin)
+  //   loader   Lv n: every bought shot costs reload x loaderStep^(n-1) (manual +1 too); auto-buys only from this sortie's credits
+  //   racks    Lv n: +(n-1) starting ammo on every weapon (Lv 1 = not bought)
+  const AUTO = {
+    fcsDelay: 3, fcsStep: 0.8, fcsMin: 0.6,
+    loaderStep: 0.9,
+    modules: [
+      { id: 'fcs', name: 'Fire-control computer', icon: '⌖', costs: [500, 1200, 2800], max: null, toggle: true,
+        desc: 'Fires your secondary weapon by itself when the shot is worth it: missiles at tough blocks, grenades and lances into crowds, shockwave when debris gets close.' },
+      { id: 'selector', name: 'Weapon selector', icon: '⇄', costs: [350], max: 1, toggle: true,
+        desc: 'Switches to a loaded weapon when the current one runs dry. With the fire-control computer, it picks the best weapon for each shot.' },
+      { id: 'loader', name: 'Ammo autoloader', icon: '↻', costs: [400, 1000, 2400], max: null, toggle: true,
+        desc: 'Buys a shot automatically when your weapon is empty, paid only from this sortie\'s credits (never your wallet). Each level makes every reload 10% cheaper.' },
+      { id: 'racks', name: 'Ammo racks', icon: '≡', costs: [300, 750, 1800], max: null, toggle: false,
+        desc: '+1 starting ammo on every weapon per level.' },
+      { id: 'dockfix', name: 'Dock repair crew', icon: '⚒', costs: [250], max: 1, toggle: true,
+        desc: 'Repairs your hull automatically when you dock (uses your wallet, partial repair if you are short).' },
+    ],
+  };
+
   // No level caps. Each table above lists the first prices; after the table runs out,
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
@@ -175,5 +197,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO };
 })();

@@ -96,6 +96,29 @@
 - **[NEEDS DECISION]** Are 8 salvage per shot and these reload prices right?
 - **[TODO]** Ideas for more weapons if you want them: tractor beam (pull loose blocks), mining drone escort (auto-mines beside you), cryo charge (freeze debris).
 
+### Ship automation: auto weapons, ammo and repairs (added 2026-11-06 at Tim's request)
+
+Tim asked for "auto action use" plus upgrades for buying ammo and switching weapons. These are modules in **Upgrades > Weapons > Ship automation** (shown once you own a weapon). Each one has an ON/OFF button after you buy it. Saves from before this change load with nothing bought (`s.auto = { lv: {}, on: {} }`). Tuning lives in `DATA.AUTO` in `js/data.js`.
+
+| Module | What it does | Cost | Levels |
+| ------ | ------------ | ---- | ------ |
+| Fire-control computer | Fires your secondary weapon by itself when the shot is worth it (rules below). A **WPN** auto toggle appears next to FIRE/BOOST/PILOT in the sortie (key H). | 500 / 1,200 / 2,800, then x1.5 | No cap. Wait between auto-shots: 3.0 s x 0.8 per level, never under 0.6 s |
+| Weapon selector | When your weapon runs dry, switches to one that still has ammo. With the fire-control computer, it picks the best weapon for each shot. Auto-switches don't change your saved equipped weapon. | 350 | One-time |
+| Ammo autoloader | When the weapon is empty (and the selector has nothing loaded to switch to), buys a shot automatically. **Only pays from that sortie's credits, never your wallet.** Each level makes every reload 10% cheaper, manual +1 too. | 400 / 1,000 / 2,400, then x1.5 | No cap (discount compounds: 10%, 19%, 27%...) |
+| Ammo racks | +1 starting ammo on every weapon per level. | 300 / 750 / 1,800, then x1.5 | No cap |
+| Dock repair crew | Repairs the hull automatically when you return from a sortie, from the wallet (partial repair if short). | 250 | One-time |
+
+- **[DONE]** Fire-control rules (a shot fires when its score is 1 or more; the highest score wins):
+  - Seeker missile: the target needs more than 2.5 s of laser time (score = seconds / 2.5).
+  - Space grenade: 4+ blocks inside the blast where it will land (score = blocks / 4).
+  - Plasma lance: 3+ blocks along the beam (score = blocks / 3).
+  - Shockwave: debris about to hit you (score 3), an electrical field warming up or live on you (score 2), or 5+ blocks close by.
+  - It does not fire during the first-flight tutorial or while you're on a spacewalk.
+- **[DONE]** The sortie summary reports auto-shots fired, shots the autoloader bought, and what the dock crew repaired.
+- **[DONE]** Tested in a 390x844 phone viewport: an old save loads with no modules; with all modules bought the computer fired 8 shots in 26 s and switched weapons by situation; with every weapon empty the autoloader bought a shot once sortie credits covered it and the wallet stayed untouched; the dock crew repaired 60 hull on return.
+- **[NEEDS DECISION]** Prices and the 2.5 s / 4-block / 3-block thresholds are my first guesses. Should the autoloader be allowed to dip into the wallet (as manual +1 does)? Should ammo racks or the fire-control computer count toward Threat (right now they don't)?
+- **[TODO]** Other "auto" ideas if you want them: auto-spacewalk to grab relics, auto-collect the drone bay on launch, auto-return when hull is low.
+
 ### Escort wing (added 2026-11-04 at Tim's request)
 
 - **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. Each one picks its own block within reach of the ship (190 at base), flies next to it and mines it with its own laser. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
@@ -222,6 +245,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Visual upgrades: laser emitter grows/changes colour, armour plates at Hull 3, engine glow in hangar preview.
 - [DONE] Region unlocks by lifetime credits + laser level, exactly as the table.
 - [DONE] Secondary weapons (see *Secondary weapons* above).
+- [DONE] Ship automation: auto-fire weapons, weapon selector, ammo autoloader, ammo racks, dock repair crew (see *Ship automation* above).
 - [TODO] Cosmetic shop (only rank-unlocked paints exist).
 
 **Miner / character**
@@ -256,6 +280,7 @@ Players can make an account (email + password), sign in on any phone or computer
 4. **Sortie length** - is ~3 minutes the right feel?
 5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
 6. **Cloud saves:** finish the Firebase setup in "Accounts and cloud saves" and send me the `apiKey` + `projectId`. Also: do you want Google sign-in as well as email + password?
+7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
 
 ## Game Design Document
 

@@ -80,7 +80,8 @@ SM.UI = (function () {
     const s = St.get();
     return St.droneAffordable() || [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
       || (St.wingCost() != null && St.wingCost() <= s.credits)
-      || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; });
+      || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; })
+      || (D.WEAPONS.some(d => St.weaponLvl(d.id)) && D.AUTO.modules.some(m => { const c = St.autoCost(m.id); return c != null && c <= s.credits; }));
   }
 
   function dur(ms) {
@@ -268,7 +269,7 @@ SM.UI = (function () {
         const can = cost != null && St.get().credits >= cost;
         const eq = wp.equipped === d.id;
         const chips = [`Damage ${Math.round(st.dmg)}${nx ? ` &rarr; <b>${Math.round(nx.dmg)}</b>` : ''}`,
-          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`, `Reload ${d.reload} cr/shot`]
+          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`, `Reload ${St.reloadCost(d.id)} cr/shot`]
           .map(c => `<span class="chip">${c}</span>`).join('');
         html += `<div class="card wcard ${eq ? 'region sel' : ''}">
           <div class="row" style="justify-content:flex-start"><div class="wicon" style="color:${d.color}">${d.icon}</div>
@@ -281,6 +282,7 @@ SM.UI = (function () {
           </div>
         </div>`;
       });
+      html += renderAuto();
     } else {
       // ----- escort wing -----
       const wing = St.get().wing, wc = St.wingCost(), canW = wc != null && St.get().credits >= wc;
@@ -348,6 +350,15 @@ SM.UI = (function () {
       if (St.buyWeapon(b.dataset.wbuy)) { SM.Audio.buy(); toast(St.weaponDef(b.dataset.wbuy).name + ' ready'); render(); }
       else { SM.Audio.deny(); toast('Not enough credits'); }
     }));
+    list.querySelectorAll('[data-abuy]').forEach(b => b.addEventListener('click', () => {
+      SM.Audio.unlock();
+      if (St.buyAuto(b.dataset.abuy)) { SM.Audio.buy(); toast(St.autoDef(b.dataset.abuy).name + ' installed'); render(); }
+      else { SM.Audio.deny(); toast('Not enough credits'); }
+    }));
+    list.querySelectorAll('[data-atgl]').forEach(b => b.addEventListener('click', () => {
+      SM.Audio.click(); St.toggleAuto(b.dataset.atgl);
+      toast(St.autoDef(b.dataset.atgl).name + (St.autoOn(b.dataset.atgl) ? ' on' : ' off')); render();
+    }));
     list.querySelectorAll('[data-equip]').forEach(b => b.addEventListener('click', () => { St.equipWeapon(b.dataset.equip); SM.Audio.click(); render(); }));
     list.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
       SM.Audio.unlock();
@@ -359,6 +370,36 @@ SM.UI = (function () {
         render();
       } else { SM.Audio.deny(); toast('Not enough credits'); }
     }));
+  }
+
+  // ---------- ship automation (Upgrades > Weapons) ----------
+  function autoEffect(id, l) {
+    const A = D.AUTO, nx = l + 1;
+    if (id === 'fcs') return l ? `Auto-shot every ${St.fcsDelay(l).toFixed(1)}s at most` + (St.fcsDelay(nx) < St.fcsDelay(l) ? ` &rarr; <b>${St.fcsDelay(nx).toFixed(1)}s</b>` : '') : `Fires at most every ${A.fcsDelay.toFixed(1)}s`;
+    if (id === 'loader') return l ? `Reloads ${Math.round((1 - Math.pow(A.loaderStep, l - 1)) * 100)}% cheaper &rarr; <b>${Math.round((1 - Math.pow(A.loaderStep, l)) * 100)}%</b>` : 'Auto-buys from sortie credits only';
+    if (id === 'racks') return `Extra ammo per weapon: +${l}` + ` &rarr; <b>+${nx}</b>`;
+    return '';
+  }
+  function renderAuto() {
+    const s = St.get();
+    let html = `<h3>Ship automation</h3>`;
+    if (!D.WEAPONS.some(d => St.weaponLvl(d.id))) return html + `<div class="card small muted">Buy a secondary weapon first. Automation modules then fire it, swap it and keep it loaded for you.</div>`;
+    html += `<div class="card small muted">Modules that use your weapons for you. Switch any of them off here at any time; the fire-control computer also has a <b>WPN</b> auto switch in the sortie controls (key H). Auto-shots skip the tutorial and spacewalks.</div>`;
+    D.AUTO.modules.forEach(m => {
+      const l = St.autoLvl(m.id), cost = St.autoCost(m.id), can = cost != null && s.credits >= cost, on = St.autoOn(m.id);
+      const lvTag = l ? (m.max === 1 ? '<span class="tag blue">OWNED</span>' : `<span class="small muted">Lv ${l}</span>`) : '<span class="tag grey">LOCKED</span>';
+      const eff = autoEffect(m.id, l);
+      html += `<div class="card wcard">
+        <div class="row" style="justify-content:flex-start"><div class="wicon">${m.icon}</div>
+          <div><b>${esc(m.name)}</b> ${lvTag}<div class="small muted">${esc(m.desc)}</div></div></div>
+        ${eff ? `<div class="wstats"><span class="chip">${eff}</span></div>` : ''}
+        <div class="btns">
+          ${cost == null ? (m.max === 1 ? '' : '<span class="tag grey">MAX</span>') : `<button class="btn ${can ? '' : 'ghost'} small-btn" data-abuy="${m.id}">${l ? 'Upgrade' : 'Buy'} - ${fmt(cost)} cr</button>`}
+          ${l && m.toggle ? `<button class="btn ${on ? '' : 'ghost'} small-btn" data-atgl="${m.id}" aria-pressed="${on}">${on ? 'ON' : 'OFF'}</button>` : ''}
+        </div>
+      </div>`;
+    });
+    return html;
   }
 
   // ---------- regions ----------
@@ -461,6 +502,9 @@ SM.UI = (function () {
     const repair = St.repairCost();
     const notes = [];
     if (res.ammoWallet > 0) notes.push(`Also paid ${fmt(res.ammoWallet)} cr from your wallet for reloads.`);
+    if (res.autoShots > 0) notes.push(`Fire-control computer fired ${res.autoShots} shot${res.autoShots === 1 ? '' : 's'}.`);
+    if (res.autoLoads > 0) notes.push(`Autoloader bought ${res.autoLoads} shot${res.autoLoads === 1 ? '' : 's'} from sortie credits.`);
+    if (extra.autoRepair) notes.push(`Dock repair crew fixed ${extra.autoRepair.pts} hull for ${fmt(extra.autoRepair.cost)} cr.`);
     if (res.shotsSalvaged > 0) notes.push(`Salvage reloaded ${res.shotsSalvaged} weapon shot${res.shotsSalvaged === 1 ? '' : 's'}.`);
     if (res.hullLost > 0) notes.push(`Hull damage: -${res.hullLost}. Repair quote: <b>${fmt(repair)} cr</b>.`);
     if (extra.rankUp) notes.push(`<b class="pos">Rank up! You are now Rank ${extra.rankUp}.</b>`);

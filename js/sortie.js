@@ -157,6 +157,7 @@ SM.Sortie = (function () {
       boosting: false,
       wing: [], eva: false, miner: null, o2: 0, relicCount: 0, relicCredits: 0,
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
+      autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
     });
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
@@ -172,6 +173,7 @@ SM.Sortie = (function () {
     w.weapon = wp.owned[wp.equipped] ? wp.equipped : (Object.keys(w.ammo)[0] || null);
     $('wpnWrap').hidden = !w.weapon;
     $('btnSwap').hidden = Object.keys(w.ammo).length < 2;
+    $('tglWpn').hidden = !w.weapon || !SM.State.autoLvl('fcs');
     input.mine = false; input.boost = false; input.stick = null;
     paused = false; running = true;
     document.body.classList.add('in-sortie');
@@ -199,6 +201,9 @@ SM.Sortie = (function () {
       const el = $(id); el.classList.toggle('on', !!s[k]); el.setAttribute('aria-pressed', s[k] ? 'true' : 'false');
       el.querySelector('small').textContent = s[k] ? 'AUTO ON' : 'AUTO OFF';
     });
+    const fcs = SM.State.autoOn('fcs'), tw = $('tglWpn');
+    tw.classList.toggle('on', fcs); tw.setAttribute('aria-pressed', fcs ? 'true' : 'false');
+    tw.querySelector('small').textContent = fcs ? 'AUTO ON' : 'AUTO OFF';
   }
 
   function pause(on) {
@@ -226,6 +231,7 @@ SM.Sortie = (function () {
       reason, region: w.region.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
       relicCount: w.relicCount, relicCredits: w.relicCredits,
       ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
+      autoShots: w.autoShots, autoLoads: w.autoLoads,
       byMat: w.byMat, byMatCr: w.byMatCr, threat: TH.level, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
@@ -313,6 +319,11 @@ SM.Sortie = (function () {
         caption(label + (st[k] ? ' on' : ' off'));
       });
     });
+    $('tglWpn').addEventListener('click', () => {
+      SM.Audio.unlock(); SM.Audio.click();
+      SM.State.toggleAuto('fcs'); applyLayout();
+      caption('Auto-weapons ' + (SM.State.autoOn('fcs') ? 'on' : 'off'));
+    });
     $('btnReturn').addEventListener('click', () => { SM.Audio.click(); end('return'); });
     $('btnPause').addEventListener('click', () => { SM.Audio.click(); pause(true); });
     $('btnResume').addEventListener('click', () => { SM.Audio.click(); pause(false); });
@@ -332,6 +343,7 @@ SM.Sortie = (function () {
       if (e.code === 'KeyF') $('tglFire').click();
       if (e.code === 'KeyB') $('tglBoost').click();
       if (e.code === 'KeyG') $('tglPilot').click();
+      if (e.code === 'KeyH' && !$('tglWpn').hidden) $('tglWpn').click();
       if (e.code === 'Tab') { e.preventDefault(); w && (w.target = nearestBlock(w.S.range * 1.5)); }
     });
     window.addEventListener('keyup', e => {
@@ -540,6 +552,7 @@ SM.Sortie = (function () {
     if (!w) return; // the sortie may have ended inside updateEva
     SM.Audio.laser(w.firing || !!(w.miner && w.miner.drilling) || w.wing.some(d => d.firing));
     updateWeapons(dt);
+    updateAuto(dt);
     updateWing(dt);
 
     // debris
@@ -872,8 +885,8 @@ SM.Sortie = (function () {
   function fireWeapon() {
     if (!w || !w.weapon) return;
     const id = w.weapon, def = SM.State.weaponDef(id), ws = SM.State.weaponStats(id);
-    if (!(w.ammo[id] > 0)) { SM.Audio.deny(); caption(def.name + ' out of ammo - restocks next sortie', 'warn'); return; }
-    if (w.wcd > 0) return;
+    if (!(w.ammo[id] > 0)) { SM.Audio.deny(); caption(def.name + ' out of ammo - restocks next sortie', 'warn'); return false; }
+    if (w.wcd > 0) return false;
     w.ammo[id]--; w.wcd = 0.35;
     const s = w.ship, aim = aimPoint();
     const a = Math.atan2(aim.y - s.y, aim.x - s.x);
@@ -910,6 +923,7 @@ SM.Sortie = (function () {
       w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: ws.radius, t: 0, life: 0.5, color: def.color });
     }
     hud();
+    return true;
   }
   // ---------- reloading ----------
   function needsAmmo(id) { return id in w.ammo && w.ammo[id] < w.maxAmmo[id]; }
@@ -931,16 +945,90 @@ SM.Sortie = (function () {
     if (!w || !w.weapon) return;
     const id = w.weapon, def = SM.State.weaponDef(id), st = SM.State.get();
     if (!needsAmmo(id)) { caption(def.name + ' is fully loaded'); return; }
-    const cost = def.reload;
+    const cost = SM.State.reloadCost(id);
     if (w.credits + st.credits < cost) { SM.Audio.deny(); caption(`Need ${cost} cr to reload`, 'warn'); return; }
-    const fromRun = Math.min(w.credits, cost), fromWallet = cost - fromRun;
+    purchaseShot(id, cost, false);
+  }
+  // runOnly: the autoloader never touches the wallet, only credits mined this sortie.
+  function purchaseShot(id, cost, runOnly) {
+    const def = SM.State.weaponDef(id), st = SM.State.get();
+    const fromRun = Math.min(w.credits, cost), fromWallet = runOnly ? 0 : cost - fromRun;
+    if (fromRun + fromWallet < cost) return false;
     w.credits -= fromRun; st.credits -= fromWallet;
     w.ammoRun += fromRun; w.ammoWallet += fromWallet; w.shotsBought++;
     if (fromWallet) SM.State.save();
     w.ammo[id]++;
     SM.Audio.buy();
-    caption(`Bought 1 ${def.name} shot -${cost} cr`);
+    caption(`${runOnly ? 'Autoloader bought' : 'Bought'} 1 ${def.name} shot -${cost} cr`);
     hud();
+    return true;
+  }
+
+  // ---------- ship automation (DATA.AUTO, bought in Upgrades > Weapons) ----------
+  function blocksNear(x, y, r) {
+    const gr = Math.ceil(r / BS) + 1, gx = Math.floor(x / BS), gy = Math.floor(y / BS);
+    let n = 0;
+    for (let dx = -gr; dx <= gr; dx++) for (let dy = -gr; dy <= gr; dy++) {
+      const b = w.grid.get(key(gx + dx, gy + dy));
+      if (b && b.alive && Math.hypot(b.x - x, b.y - y) <= r + BS / 2) n++;
+    }
+    return n;
+  }
+  // How good a shot with weapon id would be right now. >= 1 means "worth the ammo".
+  //   missile: target needs more than 2.5 s of laser time  -> secs / 2.5
+  //   grenade: blocks inside the blast where it will land   -> count / 4
+  //   lance:   blocks along the beam                        -> count / 3
+  //   shock:   debris about to hit = 3, live field on us = 2, else blocks in reach / 5
+  function shotScore(id) {
+    const s = w.ship, S = w.S, ws = SM.State.weaponStats(id), aim = aimPoint();
+    if (id === 'missile') {
+      const t = aim.b;
+      if (!t || Math.hypot(t.x - s.x, t.y - s.y) > S.range * 2) return 0;
+      return t.hp * M[t.mat].res / S.dps / 2.5;
+    }
+    if (id === 'grenade') {
+      if (!aim.b) return 0;
+      const a = Math.atan2(aim.y - s.y, aim.x - s.x), d = Math.min(240, Math.hypot(aim.x - s.x, aim.y - s.y));
+      return blocksNear(s.x + Math.cos(a) * d, s.y + Math.sin(a) * d, ws.radius) / 4;
+    }
+    if (id === 'lance') {
+      if (!aim.b) return 0;
+      const a = Math.atan2(aim.y - s.y, aim.x - s.x), hit = new Set();
+      for (let d = 10; d <= ws.range; d += 8) {
+        const b = w.grid.get(key(Math.floor((s.x + Math.cos(a) * d) / BS), Math.floor((s.y + Math.sin(a) * d) / BS)));
+        if (b && b.alive) hit.add(b);
+      }
+      return hit.size / 3;
+    }
+    if (id === 'shock') {
+      if (w.debris.some(d => Math.hypot(d.x - s.x, d.y - s.y) < ws.radius * 0.6 + d.r)) return 3;
+      if (w.fields.some(f => f.phase >= 1 && Math.hypot(f.x - s.x, f.y - s.y) < f.r + SHIP_R)) return 2;
+      return blocksNear(s.x, s.y, ws.radius * 0.75) / 5;
+    }
+    return 0;
+  }
+  function updateAuto(dt) {
+    if (!w.weapon || w.tut === 0) return;
+    const St = SM.State, loaded = id => w.ammo[id] > 0;
+    w.autoCd -= dt; w.loadCd -= dt;
+    // weapon selector: current weapon empty -> switch to one that still has ammo (doesn't change your saved pick)
+    if (!loaded(w.weapon) && St.autoOn('selector')) {
+      const next = D.WEAPONS.map(x => x.id).find(id => loaded(id));
+      if (next) { w.weapon = next; caption(St.weaponDef(next).name + ' selected (empty weapon swapped)'); hud(); }
+    }
+    // autoloader: everything we'd use is empty -> buy a shot from this sortie's credits
+    if (!loaded(w.weapon) && St.autoOn('loader') && w.loadCd <= 0) {
+      w.loadCd = 1;
+      if (purchaseShot(w.weapon, St.reloadCost(w.weapon), true)) w.autoLoads++;
+    }
+    // fire-control computer
+    if (!St.autoOn('fcs') || w.autoCd > 0 || w.eva || w.wcd > 0) return;
+    const ids = St.autoOn('selector') ? D.WEAPONS.map(x => x.id).filter(loaded) : (loaded(w.weapon) ? [w.weapon] : []);
+    let best = null, bestScore = 1;
+    ids.forEach(id => { const sc = shotScore(id); if (sc >= bestScore) { best = id; bestScore = sc; } });
+    if (!best) { w.autoCd = 0.25; return; } // check again shortly
+    w.weapon = best;
+    if (fireWeapon()) { w.autoShots++; w.autoCd = St.fcsDelay(); }
   }
 
   // weapon damage goes through block resistance just like the laser
@@ -1331,9 +1419,10 @@ SM.Sortie = (function () {
       $('btnWeapon').setAttribute('aria-label', `Fire ${def.name}, ${n} left`);
       const full = !needsAmmo(w.weapon);
       $('wpnWrap').style.setProperty('--salv', (Math.min(1, w.salvage / D.SALVAGE_PER_SHOT) * 360) + 'deg');
-      $('btnReload').innerHTML = full ? 'FULL' : `+1<small>${def.reload}cr</small>`;
-      $('btnReload').classList.toggle('off', full || w.credits + SM.State.get().credits < def.reload);
-      $('btnReload').setAttribute('aria-label', full ? 'Weapon full' : `Buy 1 shot for ${def.reload} credits`);
+      const rc = SM.State.reloadCost(w.weapon);
+      $('btnReload').innerHTML = full ? 'FULL' : `+1<small>${rc}cr</small>`;
+      $('btnReload').classList.toggle('off', full || w.credits + SM.State.get().credits < rc);
+      $('btnReload').setAttribute('aria-label', full ? 'Weapon full' : `Buy 1 shot for ${rc} credits`);
     }
   }
 

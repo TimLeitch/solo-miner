@@ -94,12 +94,19 @@ SM.Main = (function () {
     if (res.wasTutorial) s.tutorial = false;
     if (s.stats.sorties === 1) St.refreshContracts(true);
     const unlocked = St.checkUnlocks();
+    // Dock repair crew: patch the hull now with whatever is in the wallet
+    let autoRepair = null;
+    if (St.autoOn('dockfix') && St.repairCost() > 0 && s.credits > 0) {
+      const before = s.credits, hullBefore = s.hull;
+      St.repair();
+      if (s.hull > hullBefore) autoRepair = { pts: Math.round(s.hull - hullBefore), cost: before - s.credits };
+    }
     s.lastRun = { region: res.region, blocks: res.blocks, credits: res.credits + contracts.reduce((a, c) => a + c.paid, 0) + bonuses.reduce((a, b) => a + b.amount, 0) };
     St.save();
     if (contracts.length) SM.Audio.contract();
     const rankAfter = St.rank();
     SM.UI.goto('home');
-    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0 });
+    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0, autoRepair });
     SM.Cloud.sync();
   }
 
