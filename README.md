@@ -122,7 +122,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 ### Escort wing (added 2026-11-04 at Tim's request)
 
-- **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. Each one picks its own block within reach of the ship (190 at base), flies next to it and mines it with its own laser. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
+- **[DONE]** Buy up to **4 escort drones** in **Upgrades > Drones** for 400 / 900 / 1,800 / 3,500 cr. During a sortie they fly around the ship. They work blocks within reach of the ship (190 at base) as a team (see below), fly next to them and mine with their own lasers. Like your laser, they vent heat and resume by themselves. Credits from their blocks go into the run as usual.
 - **[DONE]** **Every drone has its own loadout** (Upgrades > Drones, one card per drone). Existing saves carry their old fleet-wide levels over to each drone.
   - Own upgrades, 5 levels each: **Laser** +30% power (250 / 600 / 1,300 / 2,800), **Heat sink** +30% fire time (200 / 500 / 1,100 / 2,400), **Engines** +20% speed and reach (200 / 500 / 1,100 / 2,400). Base: 2.5 dmg/s, fires 4 s then cools 2 s, reach 190. Your ship laser is 5 dmg/s.
   - **Weapon slot** (buy once per drone, then equip freely):
@@ -133,6 +133,15 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
     - Shield projector (450 cr): blocks one debris hit on your ship, recharges in 20 s. Several shield drones stack.
     - Relic collector (350 cr): flies out to grab relics near you, so no spacewalk is needed.
     - Overclock (400 cr): +40% drone laser power, but heats up 30% faster.
+- **[DONE - Tim, 2026-11-06]** **Drones mine as a team** instead of each grabbing its own block. About 3 times a second the wing makes one plan (`planWing()` in `js/sortie.js`, numbers in `js/data.js` > `WING.team`):
+  1. Rank blocks within reach by **value / (seconds to break with the whole team + seconds to fly there)**, with a bonus for blocks already being cut so drones finish what they start.
+  2. Walk that list and send the **closest free drones** to each block until it will break within **1.5 s** (`focusSecs`). Your ship laser counts when it is on that block, so drones don't waste time on a block you are about to finish.
+  3. Extra drones spill to the next block. Once everything in reach is covered, leftovers join the block that will take longest, so **no drone sits idle** while there is a block in reach.
+  - Drones sharing a block fan out around it (on your side), and the blocks the wing is cutting get **green corner brackets**.
+  - With aim assist on, your ship's auto-target prefers the block the wing is focusing (your own tapped target is never overridden). Set `WING.team.shipAssist` to `false` to turn that off.
+  - Test (headless, same seeded fields, autopilot + auto-fire, 75 s, 5 runs each, credits per sortie, old -> new): Nearside 3 drones 357 -> 363 (+2%), Nearside 6 drones 528 -> 611 (+16%), Red Shard 4 drones 230 -> 274 (+19%), Glass Moon 8 drones 548 -> 1,699 (about 3x). Idle drone time dropped from 3-27% to about 2%. The gain grows with drone count and block hardness; with few drones in a soft field the old way was already near the limit.
+  - No save changes.
+- **[NEEDS DECISION]** The offline drone bay rate does not include this teamwork boost (still +15% per drone). Should teamwork raise it, or keep offline gains as they are?
 - **[DONE]** Every escort drone you own also adds **+15% to the offline drone bay rate**. It's included in the "How it's calculated" panel.
 - **[DECIDED - Tim, 2026-11-04]** Drones get their own equipment and weapons (per-drone loadouts above).
 - **[NEEDS DECISION]** Module prices and cooldowns are first guesses.

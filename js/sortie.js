@@ -520,7 +520,7 @@ SM.Sortie = (function () {
     const wantFire = !w.eva && (input.mine || settings().autoFire);
     let inRange = w.target && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range;
     if (wantFire && (!w.target || (!inRange && settings().autoFire)) && settings().aimAssist) {
-      const nb = nearestBlock(S.range);
+      const nb = autoTarget(S.range);
       if (nb && (!w.target || !inRange)) { w.target = nb; inRange = true; }
     }
     // laser + heat
@@ -631,9 +631,79 @@ SM.Sortie = (function () {
   }
 
   // ---------- escort wing ----------
+  // Teamwork (numbers in DATA.WING.team). Instead of every drone grabbing its own block, the
+  // wing makes one plan together:
+  //   1. rank blocks in reach by value / (seconds to break with the whole team + seconds to fly there)
+  //   2. walk that list, sending the closest free drones to each block until it will break within
+  //      focusSecs (the ship's laser counts when it is on that block, so drones don't overkill it)
+  //   3. drones left over once every block is covered join the block that will take longest
+  // Venting drones and relic runs keep what they are doing and are not counted.
+  function planWing() {
+    const s = w.ship, T = D.WING.team;
+    const free = w.wing.filter(d => !d.relic && !d.venting);
+    w.wing.forEach(d => { if (d.target && !d.target.alive) d.target = null; });
+    if (!free.length) return;
+    let reach = 0, teamDps = 0, speed = 0;
+    free.forEach(d => { reach = Math.max(reach, d.st.reach); teamDps += d.st.dps; speed += d.st.speed / free.length; });
+    const shipOn = w.firing && w.target && w.target.alive ? w.target : null;
+    const cutting = new Set(w.wing.filter(d => d.target).map(d => d.target));
+    const cands = [];
+    const r = Math.ceil(reach / BS), gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const b = w.grid.get(key(gx + dx, gy + dy));
+      if (!b || !b.alive) continue;
+      const dist = Math.hypot(b.x - s.x, b.y - s.y);
+      if (dist > reach) continue;
+      const eff = b.hp * M[b.mat].res, shipDps = b === shipOn ? w.S.dps : 0;
+      let score = b.value / (eff / (teamDps + shipDps) + dist / speed + 0.5);
+      if (cutting.has(b) || b === shipOn) score *= T.stick;
+      cands.push({ b, eff, shipDps, score, dps: shipDps, crew: [] });
+    }
+    cands.sort((a, c) => c.score - a.score);
+    const left = new Set(free), used = [];
+    // a drone already on the block costs nothing to send; otherwise prefer the one closest to it
+    const cost = (d, b) => d.target === b ? -1 : Math.hypot(b.x - d.x, b.y - d.y);
+    for (const c of cands) {
+      if (!left.size) break;
+      const need = c.eff / T.focusSecs;
+      if (c.dps >= need) continue; // the ship alone finishes this one quickly
+      const crew = [...left].filter(d => Math.hypot(c.b.x - s.x, c.b.y - s.y) <= d.st.reach)
+        .sort((a, e) => cost(a, c.b) - cost(e, c.b));
+      for (const d of crew) { if (c.dps >= need) break; c.crew.push(d); c.dps += d.st.dps; left.delete(d); }
+      if (c.crew.length) used.push(c);
+    }
+    // everything in reach is covered: leftovers join whichever block will take longest
+    left.forEach(d => {
+      let best = null, bt = -1;
+      used.forEach(c => { if (Math.hypot(c.b.x - s.x, c.b.y - s.y) > d.st.reach) return; const t = c.eff / c.dps; if (t > bt) { bt = t; best = c; } });
+      if (best) { best.crew.push(d); best.dps += d.st.dps; }
+      else d.target = null; // nothing in reach: orbit the ship
+    });
+    // fan the crew of each block out on the ship's side of it, keeping drones in the same slots
+    used.forEach(c => {
+      const base = Math.atan2(s.y - c.b.y, s.x - c.b.x), n = c.crew.length;
+      c.crew.sort((a, e) => a.n - e.n).forEach((d, k) => { d.target = c.b; d.slot = base + (k - (n - 1) / 2) * T.spread; });
+    });
+  }
+
+  // the block the wing has the most drones on, within maxD of the ship (for the ship's auto-aim)
+  function wingFocus(maxD) {
+    if (!D.WING.team.shipAssist || !w.wing.length) return null;
+    const s = w.ship, count = new Map();
+    w.wing.forEach(d => { if (d.target && d.target.alive) count.set(d.target, (count.get(d.target) || 0) + 1); });
+    let best = null, bn = 0, bd = Infinity;
+    count.forEach((n, b) => {
+      const dd = Math.hypot(b.x - s.x, b.y - s.y);
+      if (dd <= maxD && (n > bn || (n === bn && dd < bd))) { best = b; bn = n; bd = dd; }
+    });
+    return best;
+  }
+  function autoTarget(maxD) { return wingFocus(maxD) || nearestBlock(maxD); }
+
   function updateWing(dt) {
-    const s = w.ship, S = w.S, claimed = new Set();
-    w.wing.forEach(d => { if (d.target && d.target.alive) claimed.add(d.target); });
+    const s = w.ship;
+    w.wingPlan = (w.wingPlan || 0) - dt;
+    if (w.wingPlan <= 0 || w.wing.some(d => d.target && !d.target.alive)) { planWing(); w.wingPlan = D.WING.team.replan; }
     w.wing.forEach(d => {
       const DS = d.st;
       droneModules(d, dt);
@@ -645,20 +715,11 @@ SM.Sortie = (function () {
         else if (dist < 14) { collectRelic(r, `Drone ${d.n} fetched a relic`); d.relic = null; }
         return;
       }
-      if (d.target && (!d.target.alive || Math.hypot(d.target.x - s.x, d.target.y - s.y) > DS.reach + 30)) { claimed.delete(d.target); d.target = null; }
-      if (!d.target) { // nearest unclaimed block within reach of the ship
-        let best = null, bd = DS.reach;
-        for (const b of w.blocks) {
-          if (!b.alive || claimed.has(b)) continue;
-          const dd = Math.hypot(b.x - s.x, b.y - s.y);
-          if (dd < bd) { bd = dd; best = b; }
-        }
-        if (best) { d.target = best; claimed.add(best); }
-      }
-      // where to fly: next to the target, or a slow orbit around the ship
+      if (d.target && (!d.target.alive || Math.hypot(d.target.x - s.x, d.target.y - s.y) > DS.reach + 30)) d.target = null;
+      // where to fly: this drone's slot beside the team's block, or a slow orbit around the ship
       let gx, gy;
       if (d.target) {
-        const a = Math.atan2(d.y - d.target.y, d.x - d.target.x);
+        const a = d.slot != null ? d.slot : Math.atan2(d.y - d.target.y, d.x - d.target.x);
         gx = d.target.x + Math.cos(a) * 38; gy = d.target.y + Math.sin(a) * 38;
       } else {
         const a = w.elapsed * 0.9 + d.phase;
@@ -678,7 +739,7 @@ SM.Sortie = (function () {
         const t = d.target;
         hurtBlock(t, DS.dps * dt, true);
         if (d.heat >= DS.fire) d.venting = true;
-        if (!t.alive) d.target = null;
+        if (!t.alive) { d.target = null; w.wingPlan = 0; }
       } else d.heat = Math.max(0, d.heat - dt);
     });
   }
@@ -827,7 +888,15 @@ SM.Sortie = (function () {
         g.fillStyle = '#f2c14e'; g.font = 'bold 9px system-ui'; g.textAlign = 'center'; g.fillText('RELIC', r.x, r.y - 16);
       }
     });
-    // escort drones
+    // escort drones: green corner brackets on the blocks the wing is cutting together
+    const focus = new Set(w.wing.filter(d => d.target && d.target.alive && !d.relic).map(d => d.target));
+    g.strokeStyle = 'rgba(87,227,154,0.75)'; g.lineWidth = 1.5;
+    focus.forEach(b => {
+      const h = BS / 2 + 3, k = 6;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+        g.beginPath(); g.moveTo(b.x + sx * h, b.y + sy * (h - k)); g.lineTo(b.x + sx * h, b.y + sy * h); g.lineTo(b.x + sx * (h - k), b.y + sy * h); g.stroke();
+      });
+    });
     w.wing.forEach(d => {
       if (d.firing && d.target) {
         g.strokeStyle = 'rgba(87,227,154,0.5)'; g.lineWidth = 3;
@@ -1116,7 +1185,7 @@ SM.Sortie = (function () {
     }
     w.pops.push({ x: b.x, y: b.y - 6, text: '+' + b.value, t: 0, color: '#ffd76a', size: m.value >= 50 ? 18 : 14 });
     if (w.target === b) {
-      w.target = settings().aimAssist ? nearestBlock(w.S.range) : null;
+      w.target = settings().aimAssist ? autoTarget(w.S.range) : null;
     }
     if (w.tut >= 0 && w.tut <= 2) tutorialStep(3);
     else if (w.tut === 3 && w.broken >= 3) tutorialStep(4);

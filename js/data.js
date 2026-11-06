@@ -71,6 +71,17 @@ SM.DATA = (function () {
     coolTime: 2,       // seconds to cool
     speed: 170, reach: 190, // reach = how far from the ship a drone will go to mine
     offlineBonus: 0.15, // +15% offline drone-bay rate per escort drone owned
+    // Teamwork: the wing plans together every `replan` s instead of each drone grabbing its own block.
+    // Blocks are ranked by value / (seconds to break + seconds to fly there). The closest free drones
+    // pile onto the best block until it will break within `focusSecs` (the ship's laser counts too),
+    // then the rest spill over to the next block. No drone sits idle while there is a block in reach.
+    team: {
+      focusSecs: 1.5,   // aim to break each focused block this fast; lower = more drones per block
+      replan: 0.3,      // seconds between plans (a broken block replans at once)
+      stick: 1.3,       // score bonus for blocks the wing is already cutting, so drones finish what they start
+      spread: 0.8,      // radians between drones sharing a block, so they fan out instead of stacking
+      shipAssist: true, // with aim assist on, the ship's auto-target prefers a block the wing is cutting
+    },
     upgrades: [
       { id: 'wlaser',  name: 'Drone lasers',     stat: 'Drone mining power', per: 0.30, costs: [250, 600, 1300, 2800], unit: '%' },
       { id: 'wcool',   name: 'Drone heat sinks', stat: 'Drone fire time',    per: 0.30, costs: [200, 500, 1100, 2400], unit: '%' },
