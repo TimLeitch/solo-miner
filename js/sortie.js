@@ -158,6 +158,7 @@ SM.Sortie = (function () {
       wing: [], eva: false, miner: null, o2: 0, relicCount: 0, relicCredits: 0,
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
       autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
+      left: world.blocks.length, startRegion: region, cleared: 0, surveyed: {},
     });
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
@@ -228,13 +229,14 @@ SM.Sortie = (function () {
     const emergency = reason === 'hull';
     const share = emergency ? Math.min(0.95, w.S.emergencyShare) : 1;
     const result = {
-      reason, region: w.region.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
+      reason, region: w.startRegion.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
       relicCount: w.relicCount, relicCredits: w.relicCredits,
       ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
       autoShots: w.autoShots, autoLoads: w.autoLoads,
       byMat: w.byMat, byMatCr: w.byMatCr, threat: TH.level, blocks: w.broken, xp: w.xp, damaged: w.damaged, emergency,
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
+      cleared: w.cleared, surveyed: Object.keys(w.surveyed), endRegion: w.region.id,
     };
     w = null;
     cb.onEnd && cb.onEnd(result);
@@ -242,7 +244,7 @@ SM.Sortie = (function () {
   // Snapshot used to bank progress if the app is killed mid-sortie.
   function snapshot() {
     if (!w || w.ended) return null;
-    return { region: w.region.id, credits: w.credits, byMat: w.byMat, blocks: w.broken, xp: w.xp,
+    return { region: w.startRegion.id, credits: w.credits, byMat: w.byMat, blocks: w.broken, xp: w.xp,
       hull: Math.max(1, Math.ceil(w.hull)), damaged: w.damaged };
   }
 
@@ -597,6 +599,34 @@ SM.Sortie = (function () {
     if (w.hull <= 0) { caption('Hull failure - emergency return', 'danger'); return end('hull'); }
     if (w.fuel <= 0) { caption('Fuel empty - towed back to the hangar', 'warn'); return end('fuel'); }
     if (w.time <= 0) return end('time');
+    if (w.left <= 0 && !w.eva) advanceWorld(); // field cleared with time to spare
+  }
+
+  // Field cleared before the timer ran out: warp to the next world and keep mining with the time,
+  // fuel, hull and credits that are left. Next world = the next unlocked region after this one; past
+  // the last unlocked region it is a fresh field of the same region. The hangar selection follows.
+  function nextRegion(region) {
+    const st = SM.State.get(), i = D.REGIONS.indexOf(region);
+    const n = D.REGIONS.slice(i + 1).find(r => st.unlocked.includes(r.id));
+    return n || region;
+  }
+  function advanceWorld() {
+    const next = nextRegion(w.region), same = next === w.region;
+    w.cleared++;
+    const world = generate(next, false);
+    Object.assign(w, { region: next, blocks: world.blocks, grid: world.grid, debris: world.debris, fields: world.fields,
+      stars: world.stars, relics: world.relics, left: world.blocks.length,
+      target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0 });
+    const s = w.ship;
+    s.x = w.dock.x; s.y = w.dock.y - 30; s.vx = 0; s.vy = 0; s.a = -Math.PI / 2; s.inv = 1.5;
+    w.cam.x = w.dock.x; w.cam.y = w.dock.y - 200;
+    w.wing.forEach((d, i) => { d.target = null; d.relic = null; d.x = s.x + Math.cos(d.phase) * 40; d.y = s.y + Math.sin(d.phase) * 40; d.vx = 0; d.vy = 0; });
+    const st = SM.State.get();
+    if (st.region !== next.id) { st.region = next.id; SM.State.save(); }
+    $('regionLabel').textContent = `${next.name} - Threat ${TH.level.toFixed(1)}`;
+    caption(same ? `Field cleared! Warping to a fresh ${next.name} field` : `Field cleared! Advancing to ${next.name}`, 'good');
+    SM.Audio.contract();
+    vibrate([40, 40, 120]);
   }
 
   function collideBlocks(s, R0) {
@@ -1169,7 +1199,8 @@ SM.Sortie = (function () {
   function breakBlock(b) {
     b.alive = false; w.grid.delete(key(b.gx, b.gy));
     const m = M[b.mat];
-    w.credits += b.value; w.broken++; w.xp += m.xp;
+    w.credits += b.value; w.broken++; w.xp += m.xp; w.left--;
+    w.surveyed[w.region.id] = true;
     w.byMatCr[b.mat] = (w.byMatCr[b.mat] || 0) + b.value;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
     addSalvage(m.xp);
@@ -1501,5 +1532,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld() };
 })();

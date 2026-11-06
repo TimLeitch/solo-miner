@@ -493,6 +493,10 @@ SM.UI = (function () {
     const reasons = { return: 'Returned safely', fuel: 'Fuel empty - towed home', time: 'Shift over - autopilot home', hull: 'Hull failure - emergency return', recovered: 'Recovered from an interrupted sortie' };
     const mats = Object.keys(res.byMat).map(m => `<div class="sum"><span>${esc(D.MATERIALS[m].name)} x${res.byMat[m]}</span><span>${fmt(res.byMatCr ? res.byMatCr[m] || 0 : res.byMat[m] * D.MATERIALS[m].value)}</span></div>`).join('') || '<div class="sum muted"><span>No blocks destroyed</span><span>0</span></div>';
     let rows = mats;
+    if (res.cleared > 0) {
+      const endR = D.REGIONS.find(x => x.id === res.endRegion);
+      rows += `<div class="sum"><span>Fields cleared x${res.cleared} - reached ${esc(endR ? endR.name : '')}</span><span class="pos">auto-advance</span></div>`;
+    }
     if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;
     if (res.emergency) rows += `<div class="sum"><span>Emergency loss (kept ${Math.round(res.share * 100)}%)</span><span class="neg">-${fmt(res.raw - res.credits)}</span></div>`;

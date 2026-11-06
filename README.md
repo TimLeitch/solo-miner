@@ -175,6 +175,15 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 - **[DONE]** Knobs: `THREAT` in `js/data.js` (`hp`, `value`, `hazard` exponents).
 - **[NEEDS DECISION]** Should the offline drone bay also scale with threat? Right now it does not, so offline income stays modest.
 
+### Auto-advance on a cleared field (added 2026-11-06 at Tim's request)
+
+- [DONE] Break every block in the field before the sortie timer runs out and the run automatically warps to the **next world**: the next unlocked region after the one you are in (Nearside > Red Shard > Glass Moon > Far Orbit). The remaining time, fuel, hull, ammo and credits carry over; the ship and wing reappear at the dock of a fresh field. A caption and chime announce it.
+- [DONE] If there is no further unlocked region, you warp into a fresh field of the same region, so clearing is never wasted.
+- [DONE] The hangar's selected region follows you, so your next launch starts in the world you reached.
+- [DONE] The sortie summary shows how many fields you cleared and where you ended up; every region you mined in pays its first-survey bonus. Contracts still score against the region you launched into.
+- [DONE] If you are out on a spacewalk when the last block breaks, the warp waits until the miner is back aboard.
+- **[NEEDS DECISION]** Should clearing a field also unlock the next region early (even if you have not hit its credit/laser requirement), or pay a clear bonus or extra time? Right now it only advances to regions you have already unlocked, with no bonus.
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.

@@ -152,3 +152,45 @@ test('higher rank improves mining speed and earnings in a sortie', () => {
   assert.ok(high.broken > low.broken, `${low.broken} -> ${high.broken} blocks`);
   assert.ok(high.credits > low.credits, `${low.credits} -> ${high.credits} credits`);
 });
+
+test('clearing every block before the timer advances to the next unlocked world', () => {
+  const { SM, advance } = game(7);
+  const st = SM.State.get();
+  st.tutorial = false;
+  st.unlocked = ['nearside', 'redshard'];
+  let ended = null;
+  SM.Sortie.start('nearside', { onEnd: r => { ended = r; } });
+  const w = SM.Sortie._debug();
+  assert.equal(w.left, w.blocks.length);
+  const timeBefore = w.time;
+  w.left = 0; // pretend the last block just broke
+  advance(0.1);
+  assert.equal(SM.Sortie.isRunning(), true, 'sortie keeps going');
+  assert.equal(w.region.id, 'redshard');
+  assert.equal(w.cleared, 1);
+  assert.equal(w.left, w.blocks.length);
+  assert.ok(w.blocks.length > 500 && w.blocks.every(b => b.alive));
+  assert.ok(w.time > timeBefore - 1, 'remaining time carries over');
+  assert.equal(st.region, 'redshard', 'hangar selection follows');
+  // no further unlocked world: a fresh field of the same region
+  w.left = 0;
+  advance(0.1);
+  assert.equal(w.region.id, 'redshard');
+  assert.equal(w.cleared, 2);
+  SM.Sortie.end('return');
+  assert.equal(ended.region, 'nearside', 'contracts still score against the launch field');
+  assert.equal(ended.endRegion, 'redshard');
+  assert.equal(ended.cleared, 2);
+});
+
+test('breaking blocks counts down the field', () => {
+  const { SM, advance } = game(11);
+  SM.State.get().tutorial = false;
+  SM.State.get().settings.autoFire = true;
+  SM.State.get().settings.autopilot = true;
+  SM.Sortie.start('nearside', {});
+  const w = SM.Sortie._debug();
+  advance(30);
+  assert.ok(w.broken > 0);
+  assert.equal(w.left, w.blocks.filter(b => b.alive).length);
+});

@@ -84,12 +84,15 @@ SM.Main = (function () {
     s.stats.sorties++; s.stats.blocks += res.blocks; s.stats.best = Math.max(s.stats.best, res.credits);
     const bonuses = [];
     s.visited = s.visited || {};
-    if (!s.visited[res.region] && res.blocks > 0) {
-      s.visited[res.region] = true;
-      const r = D.REGIONS.find(x => x.id === res.region);
+    // a cleared field can carry the run into further worlds, so every field mined in can pay its survey bonus
+    const surveyed = res.surveyed || (res.blocks > 0 ? [res.region] : []);
+    surveyed.forEach(id => {
+      if (s.visited[id]) return;
+      s.visited[id] = true;
+      const r = D.REGIONS.find(x => x.id === id);
       bonuses.push({ label: `First survey of ${r.name}`, amount: r.bonus });
       St.earn(r.bonus);
-    }
+    });
     const contracts = St.applyContracts(res);
     if (res.wasTutorial) s.tutorial = false;
     if (s.stats.sorties === 1) St.refreshContracts(true);
