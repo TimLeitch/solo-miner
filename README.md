@@ -190,11 +190,11 @@ Players can make an account (email + password), sign in on any phone or computer
   - Both changed (played offline on two devices, or signed into an account on a device that already had its own progress): the player picks, with credits / rank / upgrades / sorties / lifetime earnings shown side by side. The one further along is highlighted.
   - Every upload is conditional on the cloud copy being the version this device last saw, so two devices can never silently overwrite each other.
 - [DONE] The drone bay keeps earning across devices (its timer travels with the save).
-- [DONE] Tested against a mock Firebase in a headless phone browser: sign up, wrong password, new device adopts cloud save, progress moves between two devices both ways, conflict prompt, offline play then upload on reconnect, stays signed in after reload, sign out and clear. **Not yet tested against a real Firebase project** (needs your setup below).
+- [DONE] Tested against a mock Firebase in a headless phone browser: sign up, wrong password, new device adopts cloud save, progress moves between two devices both ways, conflict prompt, offline play then upload on reconnect, stays signed in after reload, sign out and clear. Tested against the real Firebase project on 2026-11-06 (sign up, save, load, another player's save refused, delete account).
 - [TODO] Google / Apple sign-in buttons (email + password only for now). Easy to add on Firebase if you want them.
 - [TODO] Leaderboards (the save document already stores `credits` and `rank` as fields, so this is a small step later).
 
-**[NEEDS YOU] Firebase setup (about 10 minutes, only you can do this):**
+**[DONE] Firebase setup** (Tim did this 2026-11-06; project `solo-miner-2daec`, keys in `js/cloud-config.js`). Steps kept here in case it ever needs redoing:
 1. Go to https://console.firebase.google.com, **Add project**, name it e.g. `solo-miner`. Google Analytics is optional (off is fine).
 2. **Build > Authentication > Get started > Sign-in method > Email/Password > Enable** (leave "Email link" off). Save.
 3. **Build > Firestore Database > Create database**, pick a location near your players, start in **production mode**.
@@ -281,7 +281,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Auto-save every 5s, after purchases and sorties, and when backgrounded. If the browser kills the game mid-sortie, those credits are banked on next launch ("Recovered" summary).
 - [DONE] First play session: guided hints (fly, tap the cracked block, hold MINE, keep mining, return) shown once; a pre-damaged rock sits near the hangar.
 - [TODO] Ambient music track, separate music/SFX volume.
-- [DONE] Accounts and cloud save / sync between devices (code done, **switched off until you finish the Firebase setup** in "Accounts and cloud saves" above).
+- [DONE] Accounts and cloud save / sync between devices (live on Firebase project `solo-miner-2daec` since 2026-11-06).
 - [TODO] Analytics for the playtest metrics listed at the bottom of this doc.
 
 ### Questions for you (please answer inline or in the project chat)
@@ -291,7 +291,7 @@ Players can make an account (email + password), sign in on any phone or computer
 3. **Offline gains balance** (see the two decisions above).
 4. **Sortie length** - is ~3 minutes the right feel?
 5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
-6. **Cloud saves:** finish the Firebase setup in "Accounts and cloud saves" and send me the `apiKey` + `projectId`. Also: do you want Google sign-in as well as email + password?
+6. **Cloud saves:** ~~Firebase setup~~ done. Still open: do you want Google sign-in as well as email + password? Recommended: restrict the API key to your site (step 6 of the Firebase setup).
 7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
 
 ## Game Design Document

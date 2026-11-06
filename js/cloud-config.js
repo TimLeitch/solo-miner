@@ -6,6 +6,6 @@
  * cloud saves aren't switched on yet. */
 window.SM = window.SM || {};
 SM.CLOUD_CONFIG = {
-  apiKey: '',
-  projectId: '',
+  apiKey: 'AIzaSyCjVR4rxG6KCqmYx_4hbk1YyA0PwNyeJmU',
+  projectId: 'solo-miner-2daec',
 };

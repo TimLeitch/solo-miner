@@ -127,7 +127,8 @@ SM.Cloud = (function () {
     const r = await fs('GET');
     if (r.status === 404) {
       const j = await r.clone().json().catch(() => ({}));
-      if (/database/i.test((j.error && j.error.message) || '')) throw new CloudError('Firestore database not created yet (see README).');
+      // A missing save says 'Document ... not found'; a missing database says 'The database (default) does not exist'.
+      if (/^The database .* does not exist/i.test((j.error && j.error.message) || '')) throw new CloudError('Firestore database not created yet (see README).');
       return null;
     }
     if (!r.ok) throw await fsError(r);
