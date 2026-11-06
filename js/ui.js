@@ -495,7 +495,7 @@ SM.UI = (function () {
     let rows = mats;
     if (res.cleared > 0) {
       const endR = D.REGIONS.find(x => x.id === res.endRegion);
-      rows += `<div class="sum"><span>Fields cleared x${res.cleared} - reached ${esc(endR ? endR.name : '')}</span><span class="pos">auto-advance</span></div>`;
+      rows += `<div class="sum"><span>Fields cleared x${res.cleared} - reached ${esc(endR ? endR.name : '')}</span><span class="pos">+${fmt(res.clearBonus || 0)}</span></div>`;
     }
     if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;

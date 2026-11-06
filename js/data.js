@@ -188,6 +188,11 @@ SM.DATA = (function () {
     ],
   };
 
+  // Field-clear bonus: break every block before the timer and the run pays out, then warps to the next world.
+  //   payout = fieldCredits x (pct + perSec x secondsLeft) x (1 + streak x (fieldsClearedThisSortie - 1)), + region bonus x THREAT value
+  //   it is banked safely (an emergency return never cuts it), adds `time` seconds to the clock, and refills `fuel` of the tank.
+  const CLEAR = { pct: 1.0, perSec: 0.01, streak: 0.5, regionBonus: 0.5, time: 45, fuel: 0.5, xp: 40 };
+
   // No level caps. Each table above lists the first prices; after the table runs out,
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
@@ -209,5 +214,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO };
+  return { MATERIALS, REGIONS, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR };
 })();

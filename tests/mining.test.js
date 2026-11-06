@@ -163,6 +163,7 @@ test('clearing every block before the timer advances to the next unlocked world'
   const w = SM.Sortie._debug();
   assert.equal(w.left, w.blocks.length);
   const timeBefore = w.time;
+  w.fieldCr = 1000;
   w.left = 0; // pretend the last block just broke
   advance(0.1);
   assert.equal(SM.Sortie.isRunning(), true, 'sortie keeps going');
@@ -170,7 +171,11 @@ test('clearing every block before the timer advances to the next unlocked world'
   assert.equal(w.cleared, 1);
   assert.equal(w.left, w.blocks.length);
   assert.ok(w.blocks.length > 500 && w.blocks.every(b => b.alive));
-  assert.ok(w.time > timeBefore - 1, 'remaining time carries over');
+  assert.ok(w.time > timeBefore + SM.DATA.CLEAR.time - 1, 'remaining time carries over plus clear bonus time');
+  const expected = SM.Sortie.clearBonus(1000, timeBefore - 0.1, 1, SM.DATA.REGIONS[0], SM.State.threat().value);
+  assert.ok(Math.abs(w.clearBonus - expected) <= 2, `bonus ${w.clearBonus} ~ ${expected}`);
+  assert.ok(w.clearBonus > 1000, 'clearing pays more than the field itself');
+  assert.equal(w.fieldCr, 0);
   assert.equal(st.region, 'redshard', 'hangar selection follows');
   // no further unlocked world: a fresh field of the same region
   w.left = 0;
@@ -181,6 +186,31 @@ test('clearing every block before the timer advances to the next unlocked world'
   assert.equal(ended.region, 'nearside', 'contracts still score against the launch field');
   assert.equal(ended.endRegion, 'redshard');
   assert.equal(ended.cleared, 2);
+  assert.ok(ended.credits >= w.clearBonus);
+});
+
+test('clear bonus grows with time left and with a streak of clears', () => {
+  const { SM } = game(3);
+  const r = SM.DATA.REGIONS[0];
+  const a = SM.Sortie.clearBonus(5000, 0, 1, r, 1);
+  const b = SM.Sortie.clearBonus(5000, 60, 1, r, 1);
+  const c = SM.Sortie.clearBonus(5000, 60, 2, r, 1);
+  assert.ok(a >= 5000 && b > a && c > b, `${a} ${b} ${c}`);
+});
+
+test('an emergency return never cuts the clear bonus', () => {
+  const { SM, advance } = game(5);
+  SM.State.get().tutorial = false;
+  let res = null;
+  SM.Sortie.start('nearside', { onEnd: r => { res = r; } });
+  const w = SM.Sortie._debug();
+  w.fieldCr = 2000; w.credits = 2000; w.left = 0;
+  advance(0.1);
+  const bonus = w.clearBonus;
+  w.hull = 0;
+  advance(0.1);
+  assert.equal(res.reason, 'hull');
+  assert.equal(res.credits, Math.floor(2000 * res.share) + bonus);
 });
 
 test('breaking blocks counts down the field', () => {

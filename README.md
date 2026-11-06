@@ -177,12 +177,18 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 ### Auto-advance on a cleared field (added 2026-11-06 at Tim's request)
 
-- [DONE] Break every block in the field before the sortie timer runs out and the run automatically warps to the **next world**: the next unlocked region after the one you are in (Nearside > Red Shard > Glass Moon > Far Orbit). The remaining time, fuel, hull, ammo and credits carry over; the ship and wing reappear at the dock of a fresh field. A caption and chime announce it.
+- [DONE] Break every block in the field before the sortie timer runs out and the run automatically warps to the **next world**: the next unlocked region after the one you are in (Nearside > Red Shard > Glass Moon > Far Orbit). The remaining time, fuel, hull, ammo and credits carry over (plus the clear bonus below); the ship and wing reappear at the dock of a fresh field. A caption and chime announce it.
 - [DONE] If there is no further unlocked region, you warp into a fresh field of the same region, so clearing is never wasted.
 - [DONE] The hangar's selected region follows you, so your next launch starts in the world you reached.
 - [DONE] The sortie summary shows how many fields you cleared and where you ended up; every region you mined in pays its first-survey bonus. Contracts still score against the region you launched into.
 - [DONE] If you are out on a spacewalk when the last block breaks, the warp waits until the miner is back aboard.
-- **[NEEDS DECISION]** Should clearing a field also unlock the next region early (even if you have not hit its credit/laser requirement), or pay a clear bonus or extra time? Right now it only advances to regions you have already unlocked, with no bonus.
+- [DONE] **Field-clear bonus** (Tim: "it should pay a bonus and be valuable"). Tunables in `DATA.CLEAR` (`js/data.js`):
+  - payout = credits mined in that field x (100% + 1% per second left on the clock) x streak, + 50% of the region's first-survey bonus (scaled by Threat)
+  - streak: the 2nd field cleared in one sortie pays x1.5, the 3rd x2, and so on
+  - also +45 s on the clock, half a tank of fuel back, and 40 XP x region tier
+  - the bonus is banked safely: an emergency (hull) return never cuts it
+  - example at Threat 1: a full Nearside field is about 7,300 cr, so clearing it with 60 s left pays about 11,700 cr on top. Red Shard is about 24,000 cr per field, Glass Moon 47,000, Far Orbit 116,000.
+- **[NEEDS DECISION]** Are these numbers right? And should clearing a field also unlock the next region early? Right now it only advances to regions you have already unlocked.
 
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 

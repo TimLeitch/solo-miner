@@ -158,7 +158,7 @@ SM.Sortie = (function () {
       wing: [], eva: false, miner: null, o2: 0, relicCount: 0, relicCredits: 0,
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
       autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
-      left: world.blocks.length, startRegion: region, cleared: 0, surveyed: {},
+      left: world.blocks.length, startRegion: region, cleared: 0, surveyed: {}, fieldCr: 0, clearBonus: 0,
     });
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
@@ -229,7 +229,7 @@ SM.Sortie = (function () {
     const emergency = reason === 'hull';
     const share = emergency ? Math.min(0.95, w.S.emergencyShare) : 1;
     const result = {
-      reason, region: w.startRegion.id, raw: w.credits, credits: Math.floor(w.credits * share), share,
+      reason, region: w.startRegion.id, raw: w.credits + w.clearBonus, credits: Math.floor(w.credits * share) + w.clearBonus, share, clearBonus: w.clearBonus,
       relicCount: w.relicCount, relicCredits: w.relicCredits,
       ammoRun: w.ammoRun, ammoWallet: w.ammoWallet, shotsBought: w.shotsBought, shotsSalvaged: w.shotsSalvaged,
       autoShots: w.autoShots, autoLoads: w.autoLoads,
@@ -244,7 +244,7 @@ SM.Sortie = (function () {
   // Snapshot used to bank progress if the app is killed mid-sortie.
   function snapshot() {
     if (!w || w.ended) return null;
-    return { region: w.startRegion.id, credits: w.credits, byMat: w.byMat, blocks: w.broken, xp: w.xp,
+    return { region: w.startRegion.id, credits: w.credits + w.clearBonus, byMat: w.byMat, blocks: w.broken, xp: w.xp,
       hull: Math.max(1, Math.ceil(w.hull)), damaged: w.damaged };
   }
 
@@ -610,9 +610,21 @@ SM.Sortie = (function () {
     const n = D.REGIONS.slice(i + 1).find(r => st.unlocked.includes(r.id));
     return n || region;
   }
+  // See DATA.CLEAR. Exposed for the hangar/README formula and tests.
+  function clearBonus(fieldCr, secsLeft, nth, region, threatValue) {
+    const C = D.CLEAR;
+    const mult = (C.pct + C.perSec * secsLeft) * (1 + C.streak * (nth - 1));
+    return Math.round(fieldCr * mult + region.bonus * C.regionBonus * (threatValue || 1));
+  }
   function advanceWorld() {
     const next = nextRegion(w.region), same = next === w.region;
     w.cleared++;
+    const bonus = clearBonus(w.fieldCr, Math.max(0, w.time), w.cleared, w.region, TH.value);
+    w.clearBonus += bonus; w.xp += D.CLEAR.xp * (D.REGIONS.indexOf(w.region) + 1);
+    w.time += D.CLEAR.time; if (w.time >= 30) w.warned.time = 0;
+    w.fuel = Math.min(w.S.fuel, w.fuel + w.S.fuel * D.CLEAR.fuel);
+    w.pops.push({ x: w.ship.x, y: w.ship.y - 30, text: `FIELD CLEARED +${bonus.toLocaleString()}`, t: 0, color: '#57e39a', size: 20 });
+    w.fieldCr = 0;
     const world = generate(next, false);
     Object.assign(w, { region: next, blocks: world.blocks, grid: world.grid, debris: world.debris, fields: world.fields,
       stars: world.stars, relics: world.relics, left: world.blocks.length,
@@ -624,7 +636,8 @@ SM.Sortie = (function () {
     const st = SM.State.get();
     if (st.region !== next.id) { st.region = next.id; SM.State.save(); }
     $('regionLabel').textContent = `${next.name} - Threat ${TH.level.toFixed(1)}`;
-    caption(same ? `Field cleared! Warping to a fresh ${next.name} field` : `Field cleared! Advancing to ${next.name}`, 'good');
+    caption(`Field cleared! +${bonus.toLocaleString()} cr bonus, +${D.CLEAR.time}s`, 'good');
+    caption(same ? `Warping to a fresh ${next.name} field` : `Advancing to ${next.name}`, 'good');
     SM.Audio.contract();
     vibrate([40, 40, 120]);
   }
@@ -1199,7 +1212,7 @@ SM.Sortie = (function () {
   function breakBlock(b) {
     b.alive = false; w.grid.delete(key(b.gx, b.gy));
     const m = M[b.mat];
-    w.credits += b.value; w.broken++; w.xp += m.xp; w.left--;
+    w.credits += b.value; w.fieldCr += b.value; w.broken++; w.xp += m.xp; w.left--;
     w.surveyed[w.region.id] = true;
     w.byMatCr[b.mat] = (w.byMatCr[b.mat] || 0) + b.value;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
@@ -1532,5 +1545,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld() };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), clearBonus };
 })();
