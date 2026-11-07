@@ -167,6 +167,35 @@ SM.Meta = (function () {
   function unseenAchievements() { return Math.max(0, Object.keys(meta().ach).length - (meta().achSeen || 0)); }
   function seeAchievements() { meta().achSeen = Object.keys(meta().ach).length; }
 
+  // ---------- cosmetics (DATA.PAINTS + DATA.COSMETICS) ----------
+  const KINDS = ['paint', 'trail', 'decal', 'beam'];
+  function cosmList(kind) { return kind === 'paint' ? D.PAINTS : D.COSMETICS[kind]; }
+  function cosmDef(kind, id) { const l = cosmList(kind); return l.find(x => x.id === id) || l[0]; }
+  function equipped(kind) { const s = St.get(); return kind === 'paint' ? s.paint : s.cosm[kind]; }
+  // free (no requirement), rank reached, achievement earned, or bought with stars
+  function owns(kind, id) {
+    const d = cosmDef(kind, id), s = St.get();
+    if (d.rank) return St.rank() >= d.rank;
+    if (d.ach) return !!meta().ach[d.ach];
+    if (d.stars) return !!s.cosm.owned[kind + '.' + id];
+    return true;
+  }
+  // 'equipped' | 'bought' | 'poor' | 'locked'
+  function useCosmetic(kind, id) {
+    const s = St.get(), d = cosmDef(kind, id);
+    if (!owns(kind, id)) {
+      if (!d.stars) return 'locked';
+      if (meta().stars < d.stars) return 'poor';
+      meta().stars -= d.stars; s.cosm.owned[kind + '.' + id] = true;
+      if (kind === 'paint') s.paint = id; else s.cosm[kind] = id;
+      St.save(); return 'bought';
+    }
+    if (kind === 'paint') s.paint = id; else s.cosm[kind] = id;
+    St.save(); return 'equipped';
+  }
+  // What the ship looks like now: { paint, trail, decal, beam } item definitions.
+  function look() { const o = {}; KINDS.forEach(k => { const d = cosmDef(k, equipped(k)); o[k] = owns(k, d.id) ? d : cosmList(k)[0]; }); return o; }
+
   // ---------- hooks ----------
   // After a sortie (main.js finishRun). res = the sortie result from SM.Sortie.end().
   function onRun(res, now) {
@@ -189,5 +218,5 @@ SM.Meta = (function () {
   // Something counted outside a sortie (drone bay collection, contract completed). Returns paid orders.
   function track(key, n, now) { add(key, n); return checkOrders(now); }
 
-  return { achievements, checkAchievements, unseenAchievements, seeAchievements, achValue, counter, add, dayKey, weekKey, nextMidnight, nextMonday, refresh, progress, streak, streakMult, checkOrders, onRun, track, tier };
+  return { cosmList, cosmDef, equipped, owns, useCosmetic, look, achievements, checkAchievements, unseenAchievements, seeAchievements, achValue, counter, add, dayKey, weekKey, nextMidnight, nextMonday, refresh, progress, streak, streakMult, checkOrders, onRun, track, tier };
 })();

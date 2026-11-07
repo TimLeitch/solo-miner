@@ -441,7 +441,45 @@ SM.DATA = (function () {
     { id: 'teal',     name: 'Deep teal',     color: '#3cc9b8', rank: 4 },
     { id: 'violet',   name: 'Nebula violet', color: '#a77bff', rank: 6 },
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
+    // Added 2026-11-07 with the cosmetics shop: bought with stars, or earned by an achievement (ach = achievement rung id)
+    { id: 'crimson',  name: 'Crimson',         color: '#e0455a', stars: 15 },
+    { id: 'midnight', name: 'Midnight blue',   color: '#3a5bd9', stars: 15 },
+    { id: 'mint',     name: 'Mint',            color: '#8ff0c8', stars: 25 },
+    { id: 'chrome',   name: 'Chrome',          color: '#c8d3e6', stars: 40, shine: true },
+    { id: 'void',     name: 'Void black',      color: '#2a2a35', stars: 60 },
+    { id: 'shard',    name: 'Shard rose',      color: '#ff8fc8', ach: 'rebirths.1' },
+    { id: 'storm',    name: 'Storm chaser',    color: '#7fd6ff', ach: 'events.2' },
   ];
+  // Ship cosmetics shop (added 2026-11-07 at Tim's request): engine trails, hull decals and laser colours, bought with
+  // stars (from orders and achievements), unlocked by rank, or earned by an achievement. Paints are PAINTS above.
+  //   trail: flame + particle colour (rainbow cycles), decal: drawn on the hull, beam: laser glow and core colour
+  const COSMETICS = {
+    trail: [
+      { id: 'standard', name: 'Standard burn', color: '#ffb35c', boost: '#7fd6ff' },
+      { id: 'ice',      name: 'Ice blue',      color: '#9fe3ff', boost: '#e8fbff', stars: 10 },
+      { id: 'ember',    name: 'Ember',         color: '#ff6b3d', boost: '#ffd76a', stars: 20 },
+      { id: 'plasma',   name: 'Plasma',        color: '#c77dff', boost: '#ff8fe6', stars: 30 },
+      { id: 'toxic',    name: 'Toxic green',   color: '#7dff6b', boost: '#d8ff9f', rank: 12 },
+      { id: 'comet',    name: 'Comet tail',    color: '#dff6ff', boost: '#ffffff', ach: 'events.1' },
+      { id: 'rainbow',  name: 'Rainbow',       color: 'rainbow', boost: 'rainbow', stars: 60 },
+    ],
+    decal: [
+      { id: 'none',     name: 'No decal' },
+      { id: 'stripe',   name: 'Racing stripe', stars: 10 },
+      { id: 'chevron',  name: 'Chevrons',      stars: 20 },
+      { id: 'star',     name: 'Star emblem',   stars: 30 },
+      { id: 'hazard',   name: 'Hazard stripes', stars: 40 },
+      { id: 'skull',    name: 'Scav-hunter skull', ach: 'scavs.2' },
+      { id: 'crown',    name: 'Giant crown',   ach: 'giants.2' },
+    ],
+    beam: [
+      { id: 'standard', name: 'Cyan beam',     glow: 'rgba(120,230,255,0.35)', core: '#ffffff' },
+      { id: 'crimson',  name: 'Crimson beam',  glow: 'rgba(255,80,100,0.4)',   core: '#ffe0e4', stars: 20 },
+      { id: 'emerald',  name: 'Emerald beam',  glow: 'rgba(87,227,154,0.4)',   core: '#eafff3', stars: 25 },
+      { id: 'violet',   name: 'Violet beam',   glow: 'rgba(199,125,255,0.4)',  core: '#f6e9ff', rank: 15 },
+      { id: 'gold',     name: 'Gold beam',     glow: 'rgba(255,207,63,0.45)',  core: '#fff6d0', stars: 50 },
+    ],
+  };
 
-  return { EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { COSMETICS, EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

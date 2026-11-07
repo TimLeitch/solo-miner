@@ -34,6 +34,7 @@ SM.State = (function () {
       stats: { sorties: 0, blocks: 0, best: 0, offlineEarned: 0 },
       contracts: { offers: [], active: [], refreshedAt: 0, done: 0 },
       paint: 'standard',
+      cosm: { owned: {}, trail: 'standard', decal: 'none', beam: 'standard' }, // cosmetics (paint is above), owned = 'kind.id' -> true
       weapons: { owned: {}, equipped: null }, // id -> level
       auto: { lv: {}, on: {} },                // ship automation modules: id -> level, id -> switched on
       wing: { count: 0, drones: [] },          // escort drones and their loadouts
@@ -76,6 +77,7 @@ SM.State = (function () {
     }
     s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
     s.auto = Object.assign({ lv: {}, on: {} }, parsed.auto || {}); // older saves: nothing bought
+    s.cosm = Object.assign({ owned: {}, trail: 'standard', decal: 'none', beam: 'standard' }, parsed.cosm || {});
     s.prestige = Object.assign({ shards: 0, count: 0, allTime: 0, best: 0 }, parsed.prestige || {});
     const pm = parsed.meta || {}, fm = freshMeta();
     s.meta = Object.assign(fm, pm);

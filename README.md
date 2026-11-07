@@ -354,6 +354,14 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - Numbers in `DATA.EVENTS`. Tests: comet shot and paid / escapes; derelict salvaged by autopilot + auto EVA; mothership launches drones and is taken down on autopilot; roll chances, no tutorial events, mothership only from Red Shard; every field x every event plays without errors.
 - **[NEEDS DECISION]** 30% chance and the rewards are guesses. Should events be rarer but bigger, and should the mothership drop something special (e.g. stars)?
 
+### Ship cosmetics (added 2026-11-07 at Tim's request)
+
+- **[DONE]** **Career > Style**: a shop with a live ship preview and four slots: **paint** (12), **engine trail** (7, colours the flame and exhaust particles; Rainbow cycles), **hull decal** (7: racing stripe, chevrons, star emblem, hazard stripes, skull, crown) and **laser colour** (5).
+- **[DONE]** Paid with **stars** from orders and achievements (10-60 stars), or unlocked by **rank** (the old rank paints, plus a trail at rank 12 and a laser at rank 15) or by an **achievement** (Shard rose paint for a first rebirth, Storm chaser paint for 10 rare events, Comet tail trail for the first event, skull for 100 scavengers, crown for 10 giants). Bought once, swap freely.
+- **[DONE]** The look is used in the sortie (ship, escort drones' paint, exhaust, laser beam) and in the hangar preview. Pure cosmetics: no stat changes.
+- Items in `DATA.PAINTS` / `DATA.COSMETICS`; saved as `s.paint` + `s.cosm`. Contracts > rank rewards now points to Career > Style. Test: buy once, rank / achievement unlocks, falls back to the standard look if an item isn't unlocked, sortie uses the look, save round trip.
+- **[NEEDS DECISION]** Star prices, and whether any cosmetics should cost credits instead.
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.
@@ -437,7 +445,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Secondary weapons (see *Secondary weapons* above).
 - [DONE] Ship automation: auto-fire weapons, weapon selector, ammo autoloader, ammo racks, dock repair crew (see *Ship automation* above).
 - [DONE] Ship weapons & systems: wide beam, split beam, twin miniguns, sentry turrets, point defence, deflector shield (see *Ship weapons & systems* above).
-- [TODO] Cosmetic shop (only rank-unlocked paints exist).
+- [DONE] Cosmetic shop: paints, engine trails, decals, laser colours for stars (see *Ship cosmetics*).
 
 **Miner / character**
 - [DONE] Repair training (-8%/level, capped -32%).

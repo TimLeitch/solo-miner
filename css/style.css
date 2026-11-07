@@ -268,3 +268,11 @@ body.in-sortie #hangar { display: none; }
 .coll .sw { width: 22px; height: 22px; border-radius: 5px; border: 2px solid; flex: none; }
 .coll.locked { opacity: .55; }
 #careerSeg button { padding: 10px 4px; font-size: .9em; }
+/* career: ship style */
+.cosm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.chip.cosm { display: flex; gap: 8px; align-items: center; text-align: left; min-height: 48px; }
+.chip.cosm small { font-size: .8em; color: var(--muted); }
+.chip.cosm.on { border-color: var(--good); }
+.chip.cosm.locked { opacity: .7; }
+.chip.cosm .sw { flex: none; width: 18px; height: 18px; border-radius: 50%; }
+#stylePreview { max-width: 100%; }

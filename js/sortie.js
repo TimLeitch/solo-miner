@@ -292,6 +292,7 @@ SM.Sortie = (function () {
       splitTarget: null, gunTarget: null, gunTick: 0, gunSide: 1, sentries: [], sentryCd: 1, pdCd: 0, deflect: 0,
       wantFire: false, pdZaps: 0, deflected: 0,
       events: [], event: null, derelict: null, // rare sortie events (DATA.EVENTS)
+      look: SM.Meta.look(), // cosmetics
     });
     w.event = rollEvent(region, st.tutorial);
     st.wing.drones.forEach((cfg, i, all) => {
@@ -742,7 +743,7 @@ SM.Sortie = (function () {
     if (mag > 0.1 && !settings().reducedFx && Math.random() < (w.boosting ? 0.9 : 0.45)) {
       const bx = s.x - Math.cos(s.a) * 12, by = s.y - Math.sin(s.a) * 12;
       w.particles.push({ x: bx, y: by, vx: -Math.cos(s.a) * 60 + rand(-15, 15), vy: -Math.sin(s.a) * 60 + rand(-15, 15),
-        t: 0, life: 0.35, color: w.boosting ? '#7fd6ff' : '#ffb35c', size: w.boosting ? 3 : 2 });
+        t: 0, life: 0.35, color: trailColor(w.boosting ? w.look.trail.boost : w.look.trail.color), size: w.boosting ? 3 : 2 });
     }
 
     // targeting
@@ -1547,7 +1548,7 @@ SM.Sortie = (function () {
 
   // draw helpers for the wing, the miner and relics
   function drawWingAndEva() {
-    const paint = (D.PAINTS.find(p => p.id === SM.State.get().paint) || D.PAINTS[0]).color;
+    const paint = w.look.paint.color;
     const now = performance.now() / 1000;
     // derelict ship (rare event): a broken hull with its salvage crates around it
     const dr = w.derelict;
@@ -2239,9 +2240,9 @@ SM.Sortie = (function () {
       if (w.firing) {
         const ex = s.x + Math.cos(s.a) * 10, ey = s.y + Math.sin(s.a) * 10;
         const heatC = w.heat / w.S.heat;
-        g.strokeStyle = heatC > 0.75 ? 'rgba(255,120,80,0.35)' : 'rgba(120,230,255,0.35)'; g.lineWidth = 7;
+        g.strokeStyle = heatC > 0.75 ? 'rgba(255,120,80,0.35)' : w.look.beam.glow; g.lineWidth = 7;
         g.beginPath(); g.moveTo(ex, ey); g.lineTo(b.x, b.y); g.stroke();
-        g.strokeStyle = '#fff'; g.lineWidth = 2;
+        g.strokeStyle = w.look.beam.core; g.lineWidth = 2;
         g.beginPath(); g.moveTo(ex, ey); g.lineTo(b.x + rand(-2, 2), b.y + rand(-2, 2)); g.stroke();
       }
     }
@@ -2428,20 +2429,40 @@ SM.Sortie = (function () {
 
   function drawShip(s) {
     if (s.inv > 0 && Math.floor(s.inv * 12) % 2 === 0) return;
-    const paint = (D.PAINTS.find(p => p.id === SM.State.get().paint) || D.PAINTS[0]).color;
     g.save(); g.translate(s.x, s.y); g.rotate(s.a);
-    if (s.thrust > 0.1) {
-      g.fillStyle = w.boosting ? '#7fd6ff' : '#ffb35c';
-      g.beginPath(); g.moveTo(-10, -5); g.lineTo(-10 - s.thrust * (w.boosting ? 18 : 10) - rand(0, 4), 0); g.lineTo(-10, 5); g.fill();
-    }
-    g.fillStyle = paint; g.strokeStyle = '#1a2233'; g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(15, 0); g.lineTo(-8, -11); g.lineTo(-11, -4); g.lineTo(-11, 4); g.lineTo(-8, 11); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = '#4fb8ff'; g.beginPath(); g.ellipse(3, 0, 4.5, 3, 0, 0, Math.PI * 2); g.fill();
-    const lv = SM.State.lvl('laser');
-    g.fillStyle = lv >= 3 ? '#ff6bd6' : '#7fe3ff'; g.fillRect(11, -1.5, 4 + lv, 3); // laser emitter grows with level
-    if (SM.State.lvl('minigun') >= 2) { g.fillStyle = '#9aa6b8'; g.fillRect(-2, -10, 11, 2.5); g.fillRect(-2, 7.5, 11, 2.5); } // twin miniguns
-    if (SM.State.lvl('hull') >= 3) { g.strokeStyle = '#8a96ad'; g.lineWidth = 2; g.beginPath(); g.moveTo(-6, -9); g.lineTo(4, -5); g.moveTo(-6, 9); g.lineTo(4, 5); g.stroke(); }
+    drawHull(g, w.look, { thrust: s.thrust, boosting: w.boosting, flicker: rand(0, 4) });
     g.restore();
+  }
+  // Colour of a trail at this moment ('rainbow' cycles).
+  function trailColor(c) { return c === 'rainbow' ? `hsl(${Math.floor(performance.now() / 8) % 360},90%,65%)` : c; }
+  // The ship hull with its cosmetics (SM.Meta.look()), at the origin facing +x. Shared with the hangar preview.
+  // o = { thrust 0-1, boosting, flicker } ; upgrade bits (laser emitter, miniguns, armour) come from the save.
+  function drawHull(c, look, o) {
+    o = o || {};
+    const St = SM.State, paint = look.paint.color;
+    if (o.thrust > 0.1) {
+      c.fillStyle = trailColor(o.boosting ? look.trail.boost : look.trail.color);
+      c.beginPath(); c.moveTo(-10, -5); c.lineTo(-10 - o.thrust * (o.boosting ? 18 : 10) - (o.flicker || 0), 0); c.lineTo(-10, 5); c.fill();
+    }
+    c.fillStyle = paint; c.strokeStyle = '#1a2233'; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(15, 0); c.lineTo(-8, -11); c.lineTo(-11, -4); c.lineTo(-11, 4); c.lineTo(-8, 11); c.closePath(); c.fill(); c.stroke();
+    if (look.paint.shine) { c.fillStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.moveTo(12, -1); c.lineTo(-6, -9); c.lineTo(-7, -6); c.closePath(); c.fill(); }
+    drawDecal(c, look.decal.id);
+    c.fillStyle = '#4fb8ff'; c.beginPath(); c.ellipse(3, 0, 4.5, 3, 0, 0, Math.PI * 2); c.fill();
+    const lv = St.lvl('laser');
+    c.fillStyle = lv >= 3 ? '#ff6bd6' : '#7fe3ff'; c.fillRect(11, -1.5, 4 + Math.min(lv, 8), 3); // laser emitter grows with level
+    if (St.lvl('minigun') >= 2) { c.fillStyle = '#9aa6b8'; c.fillRect(-2, -10, 11, 2.5); c.fillRect(-2, 7.5, 11, 2.5); } // twin miniguns
+    if (St.lvl('hull') >= 3) { c.strokeStyle = '#8a96ad'; c.lineWidth = 2; c.beginPath(); c.moveTo(-6, -9); c.lineTo(4, -5); c.moveTo(-6, 9); c.lineTo(4, 5); c.stroke(); }
+  }
+  function drawDecal(c, id) {
+    c.save();
+    if (id === 'stripe') { c.strokeStyle = 'rgba(20,28,45,0.7)'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(-10, 0); c.lineTo(13, 0); c.stroke(); }
+    else if (id === 'chevron') { c.strokeStyle = 'rgba(20,28,45,0.75)'; c.lineWidth = 1.6; [-3, -7].forEach(x => { c.beginPath(); c.moveTo(x - 3, -5); c.lineTo(x + 1, 0); c.lineTo(x - 3, 5); c.stroke(); }); }
+    else if (id === 'star') { c.fillStyle = '#ffd76a'; [-1, 1].forEach(sy => { c.beginPath(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 - Math.PI / 2, r = i % 2 ? 1.2 : 2.8; c.lineTo(-5 + Math.cos(a) * r, sy * 6.5 + Math.sin(a) * r); } c.fill(); }); }
+    else if (id === 'hazard') { [-1, 1].forEach(sy => { for (let i = 0; i < 3; i++) { c.fillStyle = i % 2 ? '#1a1a1a' : '#ffcf3f'; c.beginPath(); c.moveTo(-9 + i * 2, sy * 10); c.lineTo(-7 + i * 2, sy * 10); c.lineTo(-5 + i * 2, sy * 6); c.lineTo(-7 + i * 2, sy * 6); c.fill(); } }); }
+    else if (id === 'skull') { c.fillStyle = '#f2f2f2'; c.beginPath(); c.arc(-5, 0, 3.2, 0, Math.PI * 2); c.fill(); c.fillStyle = '#1a1a1a'; c.fillRect(-6.3, -1.4, 1.1, 1.1); c.fillRect(-6.3, 0.4, 1.1, 1.1); }
+    else if (id === 'crown') { c.fillStyle = '#ffcf3f'; c.beginPath(); c.moveTo(-8, -3.5); c.lineTo(-3, -3.5); c.lineTo(-5, -1.5); c.lineTo(-3, 0); c.lineTo(-5, 1.5); c.lineTo(-3, 3.5); c.lineTo(-8, 3.5); c.closePath(); c.fill(); }
+    c.restore();
   }
 
   function drawGiantCell(b, hc) {
@@ -2577,5 +2598,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _event: kind => w && startEvent(kind), _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, drawHull, _debug: () => w, _event: kind => w && startEvent(kind), _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
 })();

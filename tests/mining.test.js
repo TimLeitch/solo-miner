@@ -901,3 +901,30 @@ test('every field plays each rare event on autopilot + auto EVA without errors',
     if (SM.Sortie.isRunning()) SM.Sortie.end('return');
   }
 });
+
+test('cosmetics: stars buy items once, rank and achievement items unlock on their own, the sortie uses the look', () => {
+  const { SM } = game(31);
+  const s = SM.State.get(), M = SM.Meta;
+  assert.equal(M.look().trail.id, 'standard');
+  assert.equal(M.useCosmetic('trail', 'ember'), 'poor');
+  s.meta.stars = 25;
+  assert.equal(M.useCosmetic('trail', 'ember'), 'bought');
+  assert.equal(s.meta.stars, 5);
+  assert.equal(M.useCosmetic('trail', 'standard'), 'equipped');
+  assert.equal(M.useCosmetic('trail', 'ember'), 'equipped', 'owned: no second charge');
+  assert.equal(s.meta.stars, 5);
+  assert.equal(M.useCosmetic('trail', 'toxic'), 'locked'); // rank 12
+  s.xp = SM.State.rankXp(12);
+  assert.equal(M.useCosmetic('trail', 'toxic'), 'equipped');
+  assert.equal(M.useCosmetic('decal', 'skull'), 'locked'); // achievement
+  s.meta.ach['scavs.2'] = 1;
+  assert.equal(M.useCosmetic('decal', 'skull'), 'equipped');
+  s.xp = 0;
+  assert.equal(M.useCosmetic('paint', 'gold'), 'locked');
+  assert.equal(M.look().trail.id, 'standard', 'a rank item below its rank falls back to the standard look');
+  SM.Sortie.start('nearside');
+  assert.equal(SM.Sortie._debug().look.decal.id, 'skull');
+  SM.State.replace(SM.State.exportSave());
+  assert.equal(SM.State.get().cosm.decal, 'skull');
+  assert.ok(SM.State.get().cosm.owned['trail.ember']);
+});

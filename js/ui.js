@@ -84,13 +84,13 @@ SM.UI = (function () {
 
   // ---------- career (rebirth, achievements, collection, cosmetics, leaderboards) ----------
   let cseg = 'achievements';
-  const CAREER_SEGS = [['achievements', 'Awards'], ['collection', 'Log'], ['rebirth', 'Rebirth']];
+  const CAREER_SEGS = [['achievements', 'Awards'], ['collection', 'Log'], ['style', 'Style'], ['rebirth', 'Rebirth']];
   function careerDot() { return SM.Meta.unseenAchievements() > 0 || (St.canRebirth() && !St.get().prestige.count); }
   function renderCareer() {
     $('careerSeg').innerHTML = CAREER_SEGS.map(([id, n]) => `<button data-cseg="${id}" class="${cseg === id ? 'on' : ''}">${n}</button>`).join('');
     $('careerSeg').hidden = CAREER_SEGS.length < 2;
     $('careerSeg').querySelectorAll('[data-cseg]').forEach(b => b.addEventListener('click', () => { cseg = b.dataset.cseg; SM.Audio.click(); renderCareer(); }));
-    const fn = { rebirth: renderRebirth, achievements: renderAchievements, collection: renderCollection }[cseg];
+    const fn = { rebirth: renderRebirth, achievements: renderAchievements, collection: renderCollection, style: renderStyle }[cseg];
     $('careerBody').innerHTML = '';
     fn && fn($('careerBody'));
   }
@@ -137,6 +137,36 @@ SM.UI = (function () {
         <div class="small muted">About ${Math.round(D.EVENTS.chance * 100)}% of fields have one: a comet to shoot, a derelict to salvage on a spacewalk, or a scavenger mothership.</div></div>
       <div class="card"><div class="label">Fields</div>${fieldHtml}</div>
       <div class="card"><div class="label">Records</div>${rec.map(([n, v]) => `<div class="sum"><span>${n}</span><b>${fmt(v || 0)}</b></div>`).join('')}</div>`;
+  }
+  // Career > Style: the cosmetics shop (paints, engine trails, decals, laser colours)
+  function renderStyle(el) {
+    const s = St.get(), M = SM.Meta, look = M.look();
+    const kinds = [['paint', 'Paint'], ['trail', 'Engine trail'], ['decal', 'Decal'], ['beam', 'Laser colour']];
+    const achName = id => { const a = M.achievements().find(x => x.id === id); return a ? a.name : id; };
+    const swatch = (kind, d) => {
+      if (kind === 'paint') return `<span class="sw" style="background:${d.color}"></span>`;
+      if (kind === 'trail') return `<span class="sw" style="background:${d.color === 'rainbow' ? 'linear-gradient(90deg,#f55,#fd5,#5f8,#5af,#c6f)' : `linear-gradient(90deg,${d.color},${d.boost})`}"></span>`;
+      if (kind === 'beam') return `<span class="sw" style="background:${d.core};box-shadow:0 0 6px 2px ${d.glow}"></span>`;
+      return '';
+    };
+    el.innerHTML = `<h2>Ship style</h2>
+      <div class="card" style="text-align:center"><canvas id="stylePreview" width="240" height="140" aria-hidden="true"></canvas>
+        <div class="small">Stars: <b>${fmt(s.meta.stars)} &#9733;</b> <span class="muted">- earn them from daily / weekly orders and achievements</span></div></div>
+      ${kinds.map(([kind, label]) => `<div class="card"><div class="label">${label}</div><div class="cosm-grid">${M.cosmList(kind).map(d => {
+        const own = M.owns(kind, d.id), on = look[kind].id === d.id;
+        const need = d.rank ? `Rank ${d.rank}` : d.ach ? esc(achName(d.ach)) : `${d.stars} &#9733;`;
+        const tag = on ? '<b class="pos">Equipped</b>' : own ? 'Tap to use' : d.stars ? `<b>${need}</b>` : `<span class="muted">${need}</span>`;
+        return `<button class="chip cosm ${on ? 'on' : ''} ${own ? '' : 'locked'}" data-cosm="${kind}:${d.id}" ${!own && !d.stars ? 'aria-disabled="true"' : ''}>${swatch(kind, d)}<span>${esc(d.name)}<br><small>${tag}</small></span></button>`;
+      }).join('')}</div></div>`).join('')}`;
+    drawShipPreview($('stylePreview'), look);
+    el.querySelectorAll('[data-cosm]').forEach(b => b.addEventListener('click', () => {
+      const [kind, id] = b.dataset.cosm.split(':');
+      const r = M.useCosmetic(kind, id), d = M.cosmDef(kind, id);
+      if (r === 'poor') { SM.Audio.deny(); toast(`Needs ${d.stars} stars - you have ${fmt(St.get().meta.stars)}`); return; }
+      if (r === 'locked') { SM.Audio.deny(); toast(d.rank ? `Unlocks at rank ${d.rank}` : `Earn the "${achName(d.ach)}" achievement`); return; }
+      if (r === 'bought') { SM.Audio.buy(); toast(`${d.name} unlocked`); } else SM.Audio.click();
+      render();
+    }));
   }
   function renderRebirth(el) {
     const s = St.get(), P = s.prestige, PD = D.PRESTIGE;
@@ -288,23 +318,12 @@ SM.UI = (function () {
     return null;
   }
 
-  function drawShipPreview() {
-    const c = $('shipPreview'), g = c.getContext('2d');
-    const s = St.get();
+  function drawShipPreview(canvas, look) {
+    const c = canvas || $('shipPreview'); if (!c) return;
+    const g = c.getContext('2d');
     g.clearRect(0, 0, c.width, c.height);
-    const paint = (D.PAINTS.find(p => p.id === s.paint) || D.PAINTS[0]).color;
-    g.save(); g.translate(120, 72); g.scale(4, 4);
-    const lv = St.lvl('thruster');
-    g.fillStyle = St.lvl('reactor') >= 3 ? '#7fd6ff' : '#ffb35c';
-    g.globalAlpha = 0.8;
-    g.beginPath(); g.moveTo(-10, -4); g.lineTo(-16 - lv * 2, 0); g.lineTo(-10, 4); g.fill();
-    g.globalAlpha = 1;
-    g.fillStyle = paint; g.strokeStyle = '#1a2233'; g.lineWidth = 0.6;
-    g.beginPath(); g.moveTo(15, 0); g.lineTo(-8, -11); g.lineTo(-11, -4); g.lineTo(-11, 4); g.lineTo(-8, 11); g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = '#4fb8ff'; g.beginPath(); g.ellipse(3, 0, 4.5, 3, 0, 0, Math.PI * 2); g.fill();
-    const ll = St.lvl('laser');
-    g.fillStyle = ll >= 3 ? '#ff6bd6' : '#7fe3ff'; g.fillRect(11, -1.5, 4 + ll, 3);
-    if (St.lvl('hull') >= 3) { g.strokeStyle = '#8a96ad'; g.lineWidth = 1; g.beginPath(); g.moveTo(-6, -9); g.lineTo(4, -5); g.moveTo(-6, 9); g.lineTo(4, 5); g.stroke(); }
+    g.save(); g.translate(c.width / 2, c.height / 2 + 2); g.scale(c.height / 35, c.height / 35);
+    SM.Sortie.drawHull(g, look || SM.Meta.look(), { thrust: 0.5 + 0.1 * Math.min(5, St.lvl('thruster')), boosting: St.lvl('reactor') >= 3 });
     g.restore();
   }
 
@@ -643,14 +662,11 @@ SM.UI = (function () {
     let rr = `<div class="card"><div class="small">Rank ${r} - ${fmt(s.xp)} XP (next at ${fmt(St.rankXp(r + 1))})</div>
       <div class="small muted">Rank bonus: +${Math.round((r - 1) * D.RANK_POWER * 100)}% laser and drill power. Each rank adds ${Math.round(D.RANK_POWER * 100)}%.</div>`;
     rr += `<div class="small muted" style="margin:6px 0">Rank 3: second contract slot ${r >= 3 ? '&#10003;' : ''}</div>`;
-    rr += '<div class="mats" style="display:flex;flex-wrap:wrap;gap:6px">' + D.PAINTS.map(p => {
-      const ok = r >= p.rank, sel = s.paint === p.id;
-      return `<button class="chip" ${ok ? `data-paint="${p.id}"` : 'disabled'} style="${sel ? 'border-color:var(--accent);' : ''}${ok ? '' : 'opacity:.5'}"><span class="sw" style="background:${p.color}"></span>${esc(p.name)}${ok ? '' : ` (Rank ${p.rank})`}</button>`;
-    }).join('') + '</div></div>';
+    rr += `<div class="small muted">Ranks 2 / 4 / 6 / 8 unlock paints, 12 and 15 an engine trail and a laser colour. <button class="btn ghost small-btn" data-goto="career" id="toStyle">Ship style</button></div></div>`;
     $('rankRewards').innerHTML = rr;
     document.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => { St.acceptContract(b.dataset.accept); SM.Audio.buy(); render(); }));
     document.querySelectorAll('[data-abandon]').forEach(b => b.addEventListener('click', () => { St.abandonContract(b.dataset.abandon); SM.Audio.click(); render(); }));
-    document.querySelectorAll('[data-paint]').forEach(b => b.addEventListener('click', () => { St.get().paint = b.dataset.paint; St.save(); SM.Audio.click(); render(); }));
+    $('toStyle').addEventListener('click', () => { cseg = 'style'; });
   }
 
   // ---------- modals ----------
