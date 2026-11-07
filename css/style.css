@@ -276,3 +276,8 @@ body.in-sortie #hangar { display: none; }
 .chip.cosm.locked { opacity: .7; }
 .chip.cosm .sw { flex: none; width: 18px; height: 18px; border-radius: 50%; }
 #stylePreview { max-width: 100%; }
+/* career: leaderboards */
+.lb-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.lb-tabs .chip { font-size: .85em; padding: 6px 10px; color: var(--text); }
+.lb-tabs .chip.on { border-color: var(--accent2); color: var(--accent2); }
+.lb-row.me { background: #ffd76a22; border-radius: 6px; }

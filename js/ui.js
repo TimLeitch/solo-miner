@@ -81,13 +81,13 @@ SM.UI = (function () {
 
   // ---------- career (rebirth, achievements, collection, cosmetics, leaderboards) ----------
   let cseg = 'achievements';
-  const CAREER_SEGS = [['achievements', 'Awards'], ['collection', 'Log'], ['style', 'Style'], ['rebirth', 'Rebirth']];
+  const CAREER_SEGS = [['achievements', 'Awards'], ['collection', 'Log'], ['style', 'Style'], ['leaders', 'Top'], ['rebirth', 'Rebirth']];
   function careerDot() { return SM.Meta.unseenAchievements() > 0 || (St.canRebirth() && !St.get().prestige.count); }
   function renderCareer() {
     $('careerSeg').innerHTML = CAREER_SEGS.map(([id, n]) => `<button data-cseg="${id}" class="${cseg === id ? 'on' : ''}">${n}</button>`).join('');
     $('careerSeg').hidden = CAREER_SEGS.length < 2;
     $('careerSeg').querySelectorAll('[data-cseg]').forEach(b => b.addEventListener('click', () => { cseg = b.dataset.cseg; SM.Audio.click(); renderCareer(); }));
-    const fn = { rebirth: renderRebirth, achievements: renderAchievements, collection: renderCollection, style: renderStyle }[cseg];
+    const fn = { rebirth: renderRebirth, achievements: renderAchievements, collection: renderCollection, style: renderStyle, leaders: el => SM.Cloud.renderBoard(el) }[cseg];
     $('careerBody').innerHTML = '';
     fn && fn($('careerBody'));
   }
