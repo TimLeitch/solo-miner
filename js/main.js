@@ -11,6 +11,7 @@ SM.Main = (function () {
     SM.UI.bind();
     const s = St.get();
     const off = St.collectOffline(); // must run before anything that saves (save() advances lastSeen)
+    const news = { contractsDue: St.nextRefreshMs() === 0, fresh: SM.Meta.refresh() }; // for the welcome-back summary
     // A sortie interrupted by the app being killed: bank it rather than lose it.
     if (s.pendingRun) {
       const p = s.pendingRun; delete s.pendingRun;
@@ -25,7 +26,7 @@ SM.Main = (function () {
     SM.Cloud.init(); // signs back in from the stored session and syncs in the background (never blocks play)
     if (off) {
       if (!document.getElementById('modal').hidden) SM.UI.toast(`Drone stored +${off.gained.toLocaleString()} cr while you were away`);
-      else SM.UI.showOffline(off);
+      else SM.UI.showOffline(off, news);
     }
 
     document.addEventListener('visibilitychange', onVisibility);
@@ -51,10 +52,11 @@ SM.Main = (function () {
       SM.Cloud.flush();
     } else {
       const off = St.collectOffline();
+      const news = { contractsDue: St.nextRefreshMs() === 0, fresh: SM.Meta.refresh() };
       St.save();
       if (off) {
         if (SM.Sortie.isRunning()) SM.UI.toast(`Drone stored +${off.gained.toLocaleString()} cr while you were away`);
-        else { SM.UI.render(); SM.UI.showOffline(off); }
+        else { SM.UI.render(); SM.UI.showOffline(off, news); }
       }
       SM.Cloud.sync(); // pick up progress made on another device while we were away
     }

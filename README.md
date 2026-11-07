@@ -362,6 +362,15 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - Items in `DATA.PAINTS` / `DATA.COSMETICS`; saved as `s.paint` + `s.cosm`. Contracts > rank rewards now points to Career > Style. Test: buy once, rank / achievement unlocks, falls back to the standard look if an item isn't unlocked, sortie uses the look, save round trip.
 - **[NEEDS DECISION]** Star prices, and whether any cosmetics should cost credits instead.
 
+### Offline storage upgrade and welcome-back summary (added 2026-11-07 at Tim's request)
+
+- **[DONE]** New upgrade **Storage silo** in **Upgrades > Drones** (under the drone bay): each level adds **+2h** of offline storage on top of the drone bay's own hours (costs 300 / 700 / 1,600 / 3,600 cr, then x1.5). Total storage stops at **72h**; the button shows MAX after that. Buying it settles earnings first, like the drone bay. Formula: `storage hours = min(72, drone bay hours + 2 x (silo level - 1))`, shown in "How it's calculated".
+- **[DONE]** Auto upgrade buys it too (weight 1.1, just behind the drone bay's 0.9).
+- **[DONE]** **Welcome-back summary** now also says what changed while you were away: new daily / weekly orders (with today's list), whether your streak is still alive (and its bonus) or ended, dailies left today, weekly orders ending within a day, new contract offers, and a rebirth being available. If the bin filled up it shows the hours and credits missed and offers the silo upgrade. New buttons: **Collect & launch**, and **Collect & see storage upgrades** (when the bin capped).
+- **[DONE]** A full bin still gets a welcome-back report once you've been away an hour (before, a full bin showed nothing).
+- Numbers in `DATA.SILO`. Tests: silo adds hours, banks earnings first, stops at the max, auto upgrade offers it; a full bin still reports after an hour with the hours lost.
+- **[NEEDS DECISION]** 72h max and 2h per level: OK? (A 3-day max means a weekend away is fully paid once upgraded.)
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.

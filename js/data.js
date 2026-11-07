@@ -262,6 +262,11 @@ SM.DATA = (function () {
     // multiplier by best unlocked region = that region's `drone` value in REGIONS
   };
 
+  // Storage silo (added 2026-11-07 at Tim's request): more hours of offline storage on top of the drone bay's own.
+  // Lv 1 = none; each level adds hoursPer hours; total storage (drone bay + silo) never goes past maxHours.
+  // Costs list the first prices, then x UPGRADE_GROWTH per level like everything else.
+  const SILO = { name: 'Storage silo', hoursPer: 2, maxHours: 72, costs: [300, 700, 1600, 3600] };
+
   // Base shuttle stats (level 1).
   const BASE = {
     dps: 7.5,          // laser damage per second before resistance
@@ -338,7 +343,7 @@ SM.DATA = (function () {
       laser: 1, heatsink: 1, drone: 0.9, thruster: 1.2, fuel: 1.2, hull: 1.2, reactor: 1.4, targeting: 1.4, scanner: 1.6,
       wide: 1.3, split: 1.3, minigun: 1.4, sentry: 1.5, pd: 1.8, deflector: 1.8,
       drill: 1.3, bit: 1.5, eva: 1.5, o2: 1.5, repair: 2, suit: 2.2, fscan: 1.8,
-      wingDrone: 1.2, weapon: 1.6, module: 1.8,
+      wingDrone: 1.2, weapon: 1.6, module: 1.8, silo: 1.1,
     },
     defaultWeight: 1.5,
   };
@@ -481,5 +486,5 @@ SM.DATA = (function () {
     ],
   };
 
-  return { COSMETICS, EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { SILO, COSMETICS, EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

@@ -41,10 +41,7 @@ SM.UI = (function () {
     document.addEventListener('click', e => {
       if (!e.target.closest('[data-collect]')) return;
       SM.Audio.unlock();
-      const r = St.collectDrone();
-      if (r.credits > 0) { SM.Audio.buy(); toast(`+${fmt(r.credits)} cr from the drone`); }
-      (r.orders || []).forEach(o => toast(`${o.label} +${fmt(o.credits)} cr`));
-      r.unlocked.forEach(x => toast(`New field unlocked: ${x.name}!`));
+      collectToast(St.collectDrone());
       closeModal(); render();
     });
     // live drone counter while the hangar is on screen (keeps <details> open state)
@@ -201,7 +198,7 @@ SM.UI = (function () {
 
   function affordableAny() {
     const s = St.get();
-    return St.droneAffordable() || [...D.SHUTTLE, ...D.MINER, { id: 'drone' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
+    return St.droneAffordable() || [...D.SHUTTLE, ...D.MINER, { id: 'drone' }, { id: 'silo' }].some(u => { const c = St.upgradeCost(u.id); return c != null && c <= s.credits; })
       || (St.wingCost() != null && St.wingCost() <= s.credits)
       || D.WEAPONS.some(d => { const c = St.weaponCost(d.id); return c != null && c <= s.credits; })
       || (D.WEAPONS.some(d => St.weaponLvl(d.id)) && D.AUTO.modules.some(m => { const c = St.autoCost(m.id); return c != null && c <= s.credits; }));
@@ -225,7 +222,7 @@ SM.UI = (function () {
       ${St.get().prestige.shards ? `<div class="sum"><span>x Rebirth bonus (${St.get().prestige.shards} core shards)</span><span>x${St.prestigeDroneMult().toFixed(2)}</span></div>` : ''}
       <div class="sum"><span>x Escort wing bonus (${St.get().wing.count} drones x ${Math.round(D.WING.offlineBonus * 100)}%)</span><span>x${(1 + D.WING.offlineBonus * St.get().wing.count).toFixed(2)}</span></div>
       <div class="sum"><span>= Rate</span><b>${fmt(ds.rate)} cr/hr</b></div>
-      <div class="sum"><span>Storage = rate x ${ds.capHours}h</span><b>${fmt(ds.cap)} cr</b></div>
+      <div class="sum"><span>Storage = rate x ${ds.capHours}h${St.siloHours() ? ` (${St.droneCapHours(l)}h bay + ${St.siloHours()}h silo)` : ''}</span><b>${fmt(ds.cap)} cr</b></div>
       <p class="small muted">Stored = min(storage, stored + rate x hours passed). The drone works in real time, whether the game is open, in the background or closed. Once storage is full it stops until you collect.</p>
     </details>`;
   }
@@ -487,13 +484,15 @@ SM.UI = (function () {
       const l = St.lvl('drone');
       const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
       const mult = D.REGIONS[best].drone;
-      const wingMult = 1 + D.WING.offlineBonus * St.get().wing.count;
-      const nxt = ` &rarr; <b>${fmt(St.droneBaseRate(l + 1) * mult * wingMult)} cr/hr, ${St.droneCapHours(l + 1)}h</b>`;
+      const wingMult = (1 + D.WING.offlineBonus * St.get().wing.count) * St.prestigeDroneMult();
+      const nxt = ` &rarr; <b>${fmt(St.droneBaseRate(l + 1) * mult * wingMult)} cr/hr, ${St.droneCapAt(l + 1)}h</b>`;
       html += upgradeRow(D.DRONE, 'drone', `${fmt(St.droneRate())} cr/hr, stores ${St.droneCap()}h (${fmt(St.droneCapCredits())} cr)` + nxt);
+      const sl = St.lvl('silo'), sMax = St.upgradeCost('silo') == null;
+      html += upgradeRow(D.SILO, 'silo', `+${St.siloHours()}h storage${sMax ? ` (max ${D.SILO.maxHours}h total)` : ` &rarr; <b>+${St.siloHours(sl + 1)}h, ${fmt(St.droneRate() * St.droneCapAt(l, sl + 1))} cr max</b>`}`);
       const ds = St.droneStatus();
       html += `<div class="card"><div class="small muted">The drone mines in real time, even while the game is closed. Collect its storage from the hangar. Unlocking richer fields raises its rate (current field bonus: x${mult}).</div>${droneFormula(ds).replace('<details class="formula">', '<details class="formula" open>')}
         <div class="label" style="margin-top:8px">Your next levels (no cap) at current bonuses</div>
-        ${[0, 1, 2, 3, 4].map(k => { const L = l + k, r = St.droneBaseRate(L) * mult * wingMult, h = St.droneCapHours(L); return `<div class="sum ${k === 0 ? 'pos' : ''}"><span>Lv ${L}${k === 0 ? ' (you)' : ''}</span><span>${fmt(r)} cr/hr - ${h}h - ${fmt(r * h)} cr max</span></div>`; }).join('')}
+        ${[0, 1, 2, 3, 4].map(k => { const L = l + k, r = St.droneBaseRate(L) * mult * wingMult, h = St.droneCapAt(L); return `<div class="sum ${k === 0 ? 'pos' : ''}"><span>Lv ${L}${k === 0 ? ' (you)' : ''}</span><span>${fmt(r)} cr/hr - ${h}h - ${fmt(r * h)} cr max</span></div>`; }).join('')}
       </div>`;
     }
     list.innerHTML = html;
@@ -726,20 +725,61 @@ SM.UI = (function () {
     $('sumHangar').addEventListener('click', () => { closeModal(); goto(rec ? 'upgrades' : 'home'); });
   }
 
-  function showOffline(o) {
-    const ds = St.droneStatus();
+  // Welcome back: what the drone did, plus what changed while away (orders, streak, contracts, rebirth).
+  // news = { fresh: { daily, weekly } from SM.Meta.refresh(), contractsDue } (see main.js)
+  function awayNews(o, news) {
+    news = news || {};
+    const s = St.get(), M = SM.Meta, m = s.meta, out = [];
+    const fresh = news.fresh || {};
+    const stk = M.streak();
+    if (fresh.daily) {
+      out.push(`<b>New daily orders</b> are in: ${m.daily.orders.map(x => esc(x.name)).join(', ')}.`);
+      if (stk > 0) out.push(`Your <b>${stk}-day streak</b> is alive - finish today's three to make it ${stk + 1} (+${Math.round(D.ORDERS.streakStep * Math.min(D.ORDERS.streakMax, stk) * 100)}% daily rewards now).`);
+      else if (m.daily.lastFull) out.push('Your daily streak ended. Finish all three today to start a new one.');
+    } else {
+      const left = m.daily.orders.filter(x => !x.done).length;
+      if (left) out.push(`${left} daily order${left === 1 ? '' : 's'} left today (new ones in ${dur(M.nextMidnight() - Date.now())}).`);
+    }
+    if (fresh.weekly) out.push('<b>New weekly orders</b> are in.');
+    else {
+      const wl = M.nextMonday() - Date.now(), wd = m.weekly.orders.filter(x => x.done).length;
+      if (wl < 86400000 && wd < m.weekly.orders.length) out.push(`Weekly orders end in <b>${dur(wl)}</b> (${wd} / ${m.weekly.orders.length} done).`);
+    }
+    if (news.contractsDue && s.stats.sorties >= 1) out.push('New contract offers are waiting.');
+    if (St.canRebirth()) out.push(`Rebirth is available: <b>+${St.shardsFor(s.lifetime)} core shard${St.shardsFor(s.lifetime) === 1 ? '' : 's'}</b> (Career tab).`);
+    return out;
+  }
+  function showOffline(o, news) {
+    const ds = St.droneStatus(), lines = awayNews(o, news);
+    const siloCost = St.upgradeCost('silo');
+    const lost = o.capped ? (o.hoursAway - o.hoursCounted) : 0;
     openModal(`<h2>Welcome back, miner</h2>
       <div class="drone-anim" style="margin:6px auto" aria-hidden="true"><span></span></div>
       <p>You were away for <b>${dur(o.awayMs)}</b>. Here's what your drone did:</p>
       <div class="sum"><span>Stored when you left</span><span>${fmt(o.storeBefore)} cr</span></div>
       <div class="sum"><span>${o.hoursCounted.toFixed(2)}h x ${fmt(o.rate)} cr/hr</span><span class="pos">+${fmt(o.gained)} cr</span></div>
       <div class="sum total"><span>In storage now</span><span>${fmt(o.store)} cr</span></div>
-      ${o.capped ? `<p class="small muted">Storage hit its ${fmt(o.cap)} cr limit (${o.capHours}h) part-way through, so the last ${dur((o.hoursAway - o.hoursCounted) * 3600000)} earned nothing. Upgrade the drone bay to store more.</p>` : ''}
+      ${o.capped ? `<p class="small muted">Storage hit its ${fmt(o.cap)} cr limit (${o.capHours}h) part-way through, so the last <b>${dur(lost * 3600000)}</b> earned nothing (about ${fmt(lost * o.rate)} cr missed).
+        ${siloCost != null ? `A <b>${esc(D.SILO.name)}</b> level adds ${D.SILO.hoursPer}h of storage for ${fmt(siloCost)} cr.` : 'Upgrade the drone bay to store more.'}</p>` : ''}
       <div class="sum"><span>Wallet after collecting</span><b>${fmt(St.get().credits + Math.floor(o.store))} cr</b></div>
+      ${lines.length ? `<div class="card" style="margin:8px 0"><div class="label">While you were away</div>${lines.map(l => `<div class="small" style="margin-top:4px">&bull; ${l}</div>`).join('')}</div>` : ''}
       <button class="btn gold" data-collect>Collect ${fmt(o.store)} cr</button>
+      <button class="btn launch" id="offLaunch">Collect &amp; launch</button>
+      ${o.capped && siloCost != null ? '<button class="btn ghost" id="offSilo">Collect &amp; see storage upgrades</button>' : ''}
       <button class="btn ghost" id="offLater">Leave it in storage</button>
       ${droneFormula(ds)}`);
     $('offLater').addEventListener('click', () => { closeModal(); render(); });
+    $('offLaunch').addEventListener('click', () => { SM.Audio.unlock(); collectToast(St.collectDrone()); closeModal(); SM.Main.launch(); });
+    if ($('offSilo')) $('offSilo').addEventListener('click', () => {
+      collectToast(St.collectDrone()); closeModal();
+      seg = 'drone'; document.querySelectorAll('#scr-upgrades .seg button').forEach(x => x.classList.toggle('on', x.dataset.seg === 'drone'));
+      goto('upgrades');
+    });
+  }
+  function collectToast(r) {
+    if (r.credits > 0) { SM.Audio.buy(); toast(`+${fmt(r.credits)} cr from the drone`); }
+    (r.orders || []).forEach(o => toast(`${o.label} +${fmt(o.credits)} cr`));
+    r.unlocked.forEach(x => toast(`New field unlocked: ${x.name}!`));
   }
 
   function openSettings() {

@@ -21,6 +21,7 @@ SM.State = (function () {
     D.SHUTTLE.forEach(u => (lv[u.id] = 1));
     D.MINER.forEach(u => (lv[u.id] = 1));
     lv.drone = 1;
+    lv.silo = 1;
     return {
       v: VERSION,
       credits: 0,
@@ -219,8 +220,12 @@ SM.State = (function () {
   // Offline drone bay past its table: rate x1.5 per level, storage +2h per level up to 24h.
   function droneBaseRate(l) { const t = D.DRONE.ratePerHour; return l <= t.length ? t[l - 1] : tidy(t[t.length - 1] * Math.pow(1.5, l - t.length)); }
   function droneCapHours(l) { const t = D.DRONE.capHours; return l <= t.length ? t[l - 1] : Math.min(24, t[t.length - 1] + 2 * (l - t.length)); }
+  // Offline storage hours for a drone bay level, with the storage silo on top (capped at SILO.maxHours).
+  function siloHours(l) { return D.SILO.hoursPer * ((l == null ? lvl('silo') : l) - 1); }
+  function droneCapAt(droneLv, siloLv) { return Math.min(D.SILO.maxHours, droneCapHours(droneLv) + siloHours(siloLv)); }
   function upgradeCost(id) {
-    const def = id === 'drone' ? D.DRONE : (D.SHUTTLE.find(x => x.id === id) || D.MINER.find(x => x.id === id));
+    if (id === 'silo' && droneCapAt(lvl('drone'), lvl('silo') + 1) <= droneCap()) return null; // storage already maxed
+    const def = id === 'drone' ? D.DRONE : id === 'silo' ? D.SILO : (D.SHUTTLE.find(x => x.id === id) || D.MINER.find(x => x.id === id));
     const l = lvl(id);
     return tierCost(def.costs, l - 1);
   }
@@ -228,7 +233,7 @@ SM.State = (function () {
     const c = upgradeCost(id);
     if (c == null || s.credits < c) return false;
     const oldMax = maxHull();
-    if (id === 'drone') accrue(); // earnings so far use the old rate
+    if (id === 'drone' || id === 'silo') accrue(); // earnings so far use the old rate / storage
     s.credits -= c;
     s.levels[id] = lvl(id) + 1;
     if (id === 'hull') s.hull += maxHull() - oldMax; // new plating arrives intact
@@ -374,7 +379,7 @@ SM.State = (function () {
     const A = D.AUTO_UPGRADE, w = k => A.weights[k] != null ? A.weights[k] : A.defaultWeight;
     const out = [];
     const capped = { wide: D.SHIP_GEAR.wide.max, split: D.SHIP_GEAR.split.max, bit: 1 }; // side burn / second beam / side cut stop at 100%
-    [...D.SHUTTLE, ...D.MINER, { id: 'drone', name: 'Mining drone bay' }].forEach(u => {
+    [...D.SHUTTLE, ...D.MINER, { id: 'drone', name: 'Mining drone bay' }, { id: 'silo', name: D.SILO.name }].forEach(u => {
       if (capped[u.id] != null && u.per * (lvl(u.id) - 1) >= capped[u.id]) return;
       const c = upgradeCost(u.id);
       if (c != null) out.push({ key: u.id, name: u.name, lv: lvl(u.id) + 1, cost: c, score: c * w(u.id), buy: () => buy(u.id) });
@@ -452,7 +457,7 @@ SM.State = (function () {
     const best = Math.max(0, ...s.unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
     return droneBaseRate(l) * D.REGIONS[best].drone * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0)) * prestigeDroneMult();
   }
-  function droneCap() { return droneCapHours(lvl('drone')); }
+  function droneCap() { return droneCapAt(lvl('drone')); }
   function droneCapCredits() { return droneRate() * droneCap(); }
   /* Drone storage formula (runs in real time, whether the game is open, in the background or closed):
    *   rate      = ratePerHour[droneLevel] x drone[best unlocked field]      (credits / hour)
@@ -496,7 +501,7 @@ SM.State = (function () {
     const storeBefore = s.drone.store, rate = droneRate(), cap = droneCapCredits();
     const gained = accrue(now);
     s.lastSeen = now;
-    if (away < 60 * 1000 || gained < 1) return null;
+    if (away < 60 * 1000 || (gained < 1 && away < 3600000)) return null; // a full bin still gets a report after an hour away
     const hoursAway = away / 3600000;
     const hoursUntilFull = (cap - storeBefore) / rate;
     return { awayMs: away, hoursAway, gained: Math.floor(gained), storeBefore: Math.floor(storeBefore), store: Math.floor(s.drone.store),
@@ -574,7 +579,7 @@ SM.State = (function () {
   return {
     load, save, reset, get, exportSave, progressHash, replace, isFresh, lvl, stats, maxHull, repairCost, rank, rankXp, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
-    tierCost, droneBaseRate, droneCapHours, threat,
+    tierCost, droneBaseRate, droneCapHours, droneCapAt, siloHours, threat,
     prestigeMult, prestigeDroneMult, shardsFor, allTimeCredits, canRebirth, rebirth,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,

@@ -928,3 +928,43 @@ test('cosmetics: stars buy items once, rank and achievement items unlock on thei
   assert.equal(SM.State.get().cosm.decal, 'skull');
   assert.ok(SM.State.get().cosm.owned['trail.ember']);
 });
+
+test('storage silo adds offline hours on top of the drone bay, capped at the max, and settles earnings first', () => {
+  const { SM } = game(41);
+  const s = SM.State.get(), D = SM.DATA;
+  assert.equal(SM.State.droneCap(), D.DRONE.capHours[0]);
+  const t0 = Date.now();
+  s.drone = { store: 0, tick: t0 - 3600000 }; // 1 h of earnings waiting at the old storage size
+  s.credits = 100000;
+  assert.ok(SM.State.buy('silo'));
+  assert.equal(SM.State.droneCap(), D.DRONE.capHours[0] + D.SILO.hoursPer);
+  assert.ok(Math.abs(s.drone.store - SM.State.droneRate()) < SM.State.droneRate() * 0.01, 'the hour before the purchase was banked');
+  // storage after 30 hours away: limited by bay + silo
+  s.drone = { store: 0, tick: t0 - 30 * 3600000 };
+  const st = SM.State.droneStatus(t0);
+  assert.ok(Math.abs(st.store - SM.State.droneRate() * SM.State.droneCap()) < 1);
+  // it stops being sold once total storage hits the max
+  s.levels.drone = 30; s.levels.silo = 1;
+  let n = 0; s.credits = 1e12;
+  while (SM.State.upgradeCost('silo') != null && n < 100) { SM.State.buy('silo'); n++; }
+  assert.equal(SM.State.droneCap(), D.SILO.maxHours);
+  assert.ok(n > 0 && n < 100);
+  // auto upgrade knows about it
+  const { SM: SM2 } = game(42);
+  SM2.State.get().credits = 400;
+  assert.ok(SM2.State.autoUpgradeOptions().some(o => o.key === 'silo'));
+});
+
+test('welcome back: a full bin still reports after an hour away, with the hours lost', () => {
+  const { SM } = game(43);
+  const s = SM.State.get(), now = Date.now();
+  s.drone = { store: SM.State.droneCapCredits(), tick: now - 5 * 3600000 };
+  s.lastSeen = now - 5 * 3600000;
+  const o = SM.State.collectOffline(now);
+  assert.ok(o, 'reported even though nothing new was stored');
+  assert.equal(o.gained, 0);
+  assert.equal(o.capped, true);
+  assert.ok(Math.abs(o.hoursAway - o.hoursCounted - 5) < 0.01);
+  s.lastSeen = now - 30 * 60000; // half an hour, bin full: no report
+  assert.equal(SM.State.collectOffline(now), null);
+});
