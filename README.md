@@ -343,6 +343,17 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - Ladders and goals are in `DATA.ACHIEVEMENTS` / `DATA.STARS_BY_RUNG`; code in `js/meta.js`. Achievements are earned once and survive a rebirth. Test: unlock from counters, rank and fields, paid once, unseen dot count.
 - **[NEEDS DECISION]** Should achievements also pay credits, or only stars (as now)?
 
+### Rare sortie events (added 2026-11-07 at Tim's request)
+
+- **[DONE]** About **30%** of fields (each launch, and each warp after a clear) get one rare event, 15-45 s in. Never in the tutorial.
+  - **Comet:** streaks across the field once. Laser (or guns, missiles) it before it leaves: pays 6x the field's relic value and refuels 25%. If it gets away, it's missed.
+  - **Derelict ship:** a wreck drifts into open space nearby with **4 salvage crates** (2.5x relic value each). Only the miner can grab them on a spacewalk (escort relic collectors leave them alone).
+  - **Scavenger mothership** (Red Shard and later): 14x a scavenger's health, eats blocks fast, launches a scavenger every 12 s (up to 3), and every 8 s charges a pulse (1.2 s red warning ring) that hits a ship within 110 for 14 x hazard. Bounty 15x relic value.
+- **[DONE]** **Autopilot copes:** it chases a comet (leading its path), cuts a route through rock to the mothership (same route planner as giant rocks) and then holds just outside its pulse range while firing, and - with **Auto EVA** on - parks by a derelict so the miner fetches every crate by itself.
+- **[DONE]** Events show in the sortie summary (destroyed / salvaged with credits, or "got away"), count for the weekly "Find a rare event" order and the **Storm chaser** achievement, and are listed under **Career > Log > Rare finds**.
+- Numbers in `DATA.EVENTS`. Tests: comet shot and paid / escapes; derelict salvaged by autopilot + auto EVA; mothership launches drones and is taken down on autopilot; roll chances, no tutorial events, mothership only from Red Shard; every field x every event plays without errors.
+- **[NEEDS DECISION]** 30% chance and the rewards are guesses. Should events be rarer but bigger, and should the mothership drop something special (e.g. stars)?
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.

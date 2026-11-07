@@ -371,6 +371,24 @@ SM.DATA = (function () {
     },
   };
 
+  // Rare sortie events (added 2026-11-07 at Tim's request). Each field (every launch and every warp after a clear) has
+  // `chance` of one event, showing up `after` seconds in. Never in the tutorial. Credits scale with the field's relic value
+  // x Threat value; health with Threat hp.
+  //   comet     streaks across the field once. Laser it before it leaves: hp, value (x relic), speed, refuels `fuel` of the tank
+  //   derelict  a wrecked ship drifts in with `crates` salvage crates only the miner can grab on a spacewalk (crateValue x relic each)
+  //   boss      scavenger mothership (from field `minTier`): hp x scav health, eats blocks, launches a scavenger every
+  //             `spawnEvery` s (up to `maxAdds`), and every `pulseEvery` s charges a pulse that hits a ship within `pulseR`
+  //             for pulseDmg x Threat hazard (1.2 s warning). Bounty = value x relic.
+  // Autopilot chases comets and stands off from the boss just outside its pulse; with auto EVA on it parks at the wreck.
+  const EVENTS = {
+    chance: 0.3, after: [15, 45],
+    kinds: {
+      comet:    { w: 1, name: 'Comet', hp: 220, value: 6, speed: 60, fuel: 0.25, xp: 40 },
+      derelict: { w: 1, name: 'Derelict ship', crates: 4, crateValue: 2.5, xp: 50 },
+      boss:     { w: 0.8, name: 'Scavenger mothership', minTier: 2, hp: 14, value: 15, spawnEvery: 12, maxAdds: 3, pulseEvery: 8, pulseR: 110, pulseDmg: 14, xp: 80 },
+    },
+  };
+
   // Achievements (added 2026-11-07 at Tim's request). Each line is one ladder: [id, name, what is counted, goals, text].
   // A rung unlocks once the count reaches its goal and pays STARS_BY_RUNG[rung] stars (stars buy cosmetics).
   // Counts: lifetime counters in s.meta.counters (blocks, sorties, relics, giants, scavs, clears, contracts, dailies,
@@ -393,6 +411,7 @@ SM.DATA = (function () {
     ['mats',     'Geologist',       'mats',      [7, 14], 'Discover {n} materials'],
     ['offline',  'Idle tycoon',     'offline',   [10000, 100000, 1000000], 'Collect {n} cr from the drone bay'],
     ['rebirths', 'Born again',      'rebirths',  [1, 5, 10], 'Rebirth {n} times'],
+    ['events',   'Storm chaser',    'events',    [1, 10, 50], 'Complete {n} rare events (comet, derelict, mothership)'],
   ];
   const STARS_BY_RUNG = [2, 5, 10, 20];
 
@@ -424,5 +443,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

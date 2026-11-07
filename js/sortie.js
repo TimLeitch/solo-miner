@@ -291,7 +291,9 @@ SM.Sortie = (function () {
       // ship weapons & systems (DATA.SHIP_GEAR)
       splitTarget: null, gunTarget: null, gunTick: 0, gunSide: 1, sentries: [], sentryCd: 1, pdCd: 0, deflect: 0,
       wantFire: false, pdZaps: 0, deflected: 0,
+      events: [], event: null, derelict: null, // rare sortie events (DATA.EVENTS)
     });
+    w.event = rollEvent(region, st.tutorial);
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
       const pod = D.WING.weapons.find(m => m.id === 'pod');
@@ -370,6 +372,7 @@ SM.Sortie = (function () {
       time: w.elapsed, wasTutorial: w.tut >= 0,
       cleared: w.cleared, surveyed: Object.keys(w.surveyed), endRegion: w.region.id,
       giants: w.giantsCracked, giantCr: w.giantCr, foeKills: w.foeKills,
+      events: w.events.map(e => ({ kind: e.kind, done: e.done, credits: e.credits })),
     };
     w = null;
     cb.onEnd && cb.onEnd(result);
@@ -542,6 +545,9 @@ SM.Sortie = (function () {
   // Returns a steering vector {x,y} or null when the ship should hold position.
   function autopilot(dt) {
     const s = w.ship, S = w.S;
+    // rare events first: chase a comet, stand off from a mothership, park by a derelict for auto EVA
+    const ep = eventPilot();
+    if (ep !== undefined) return ep;
     // auto EVA: park at the hatch of a giant rock that still needs hollowing (and wait there while oxygen refills)
     const eg = settings().autoEva ? evaGiant() : null;
     if (eg) { w.apGoal = null; return followRoute(eg); }
@@ -613,15 +619,17 @@ SM.Sortie = (function () {
     return { cells: cells.reverse(), cost: dist[goal] };
   }
   // the route to a giant's parking spot, replanned every 2 s (blocks break, the ship drifts)
-  function giantRoute(G) {
+  // (also used for rare events: the goal is then a mothership or a derelict, with its own point p)
+  function giantRoute(G, p) {
     const R = w.route;
     if (R && R.giant === G && w.elapsed - R.at < 2) return R;
-    const p = parkPoint(G), r = planRoute(p.x, p.y) || { cells: [], cost: Infinity };
+    p = p || parkPoint(G);
+    const r = planRoute(p.x, p.y) || { cells: [], cost: Infinity };
     return (w.route = Object.assign(r, { giant: G, at: w.elapsed, i: 0 }));
   }
   // fly the route; when a block sits on it, aim the laser at that block and wait for it to break
-  function followRoute(G) {
-    const s = w.ship, p = parkPoint(G), R = giantRoute(G);
+  function followRoute(G, goal) {
+    const s = w.ship, p = goal || parkPoint(G), R = giantRoute(G, p);
     while (R.i < R.cells.length - 1) {
       const c = R.cells[R.i];
       if (Math.hypot(c.gx * BS + BS / 2 - s.x, c.gy * BS + BS / 2 - s.y) < BS * 0.6) R.i++; else break;
@@ -844,13 +852,16 @@ SM.Sortie = (function () {
   function killFoe(f) {
     if (!f.alive) return;
     f.alive = false;
-    w.credits += f.value; w.xp += M.scav.xp; w.foeKills++;
+    w.credits += f.value; w.xp += f.xp || M.scav.xp;
+    if (f.kind) eventDone(f.ev, f.value); else w.foeKills++;
+    if (f.kind === 'comet') { w.fuel = Math.min(w.S.fuel, w.fuel + w.S.fuel * D.EVENTS.kinds.comet.fuel); caption('Comet shattered! Ice topped up your fuel', 'good'); }
+    if (f.kind === 'boss') caption('Mothership destroyed!', 'good');
     SM.Audio.boom(); vibrate(40);
     for (let i = 0; i < 22; i++) {
       const a = rand(0, Math.PI * 2), sp = rand(50, 190);
       w.particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.4, 0.8), color: i % 2 ? M.scav.color : '#ffd76a', size: rand(2, 4) });
     }
-    w.pops.push({ x: f.x, y: f.y - 8, text: '+' + f.value + ' bounty', t: 0, color: '#ffd76a', size: 16 });
+    w.pops.push({ x: f.x, y: f.y - 8, text: '+' + f.value + (f.kind ? '' : ' bounty'), t: 0, color: '#ffd76a', size: f.kind ? 22 : 16 });
     if (w.target === f) w.target = null;
   }
   function disarmMine(m) {
@@ -946,20 +957,23 @@ SM.Sortie = (function () {
       const fr = b.hp / b.maxHp; b.state = fr > 0.66 ? 0 : fr > 0.33 ? 1 : 2;
     });
     // scavengers: fly to the nearest block, chew through it, move on
+    updateEvent(dt);
     w.foes.forEach(f => {
       if (!f.alive) return;
       if (f.flash > 0) f.flash -= dt;
+      if (f.kind === 'comet') return moveComet(f, dt);
+      if (f.kind === 'boss') bossActs(f, dt);
       if (f.wait > 0) { f.wait -= dt; f.x += Math.cos(f.seed + w.elapsed) * 20 * dt; f.y += Math.sin(f.seed + w.elapsed * 0.7) * 20 * dt; return; }
       if (!f.prey || !f.prey.alive) { f.prey = nearestBlockTo(f.x, f.y, 3000); f.eat = 0; }
       const b = f.prey; if (!b) return;
       const dx = b.x - f.x, dy = b.y - f.y, d = Math.hypot(dx, dy) || 1;
       f.a = Math.atan2(dy, dx);
-      const sp = 75 * Math.min(1.6, Math.pow(TH.hazard, 0.3));
+      const sp = 75 * Math.min(1.6, Math.pow(TH.hazard, 0.3)) * (f.kind === 'boss' ? 0.5 : 1);
       if (d > 26) { f.vx += (dx / d * sp - f.vx) * Math.min(1, dt * 3); f.vy += (dy / d * sp - f.vy) * Math.min(1, dt * 3); }
       else { f.vx *= 0.8; f.vy *= 0.8; }
       f.x += f.vx * dt; f.y += f.vy * dt;
       if (d < 30) {
-        b.hp -= b.maxHp / 2.5 * dt; b.flash = 0.05;
+        b.hp -= b.maxHp / (f.kind === 'boss' ? 1.2 : 2.5) * dt; b.flash = 0.05;
         if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: b.x, y: b.y, vx: rand(-40, 40), vy: rand(-40, 40), t: 0, life: 0.3, color: M[b.mat].color, size: 2 });
         if (b.hp <= 0) {
           b.alive = false; w.grid.delete(key(b.gx, b.gy)); w.left--; f.prey = null; f.wait = 0.6;
@@ -969,6 +983,135 @@ SM.Sortie = (function () {
         }
       }
     });
+  }
+
+  // ---------- rare sortie events (DATA.EVENTS, added 2026-11-07) ----------
+  // Roll for this field's event: { kind, at (seconds into the sortie) } or null.
+  function rollEvent(region, tutorial, force) {
+    const E = D.EVENTS, tier = D.REGIONS.indexOf(region);
+    if (!force && (tutorial || E.chance <= 0 || Math.random() >= E.chance)) return null;
+    const kinds = Object.keys(E.kinds).filter(k => (E.kinds[k].minTier || 0) <= tier);
+    let kind = force;
+    if (!kind) {
+      let r = Math.random() * kinds.reduce((a, k) => a + E.kinds[k].w, 0);
+      kind = kinds.find(k => (r -= E.kinds[k].w) < 0) || kinds[0];
+    }
+    return { kind, at: w ? w.elapsed + rand(E.after[0], E.after[1]) : rand(E.after[0], E.after[1]) };
+  }
+  // Start an event now (used by the timer, and by tests / debugging).
+  function startEvent(kind) {
+    const E = D.EVENTS.kinds[kind], R = w.region, relic = (R.relic || 60) * TH.value, s = w.ship;
+    const ev = { kind, done: false, credits: 0 };
+    w.events.push(ev); w.event = null;
+    if (kind === 'comet') {
+      // enter from a side edge, aimed across the field past the ship's area
+      const left = Math.random() < 0.5, y0 = Math.max(120, Math.min(H - 500, s.y + rand(-500, 200)));
+      const x0 = left ? -30 : W + 30, tx = left ? W + 60 : -60, ty = Math.max(80, Math.min(H - 400, s.y + rand(-250, 250)));
+      const d = Math.hypot(tx - x0, ty - y0), sp = E.speed * Math.min(1.5, Math.pow(TH.hazard, 0.3));
+      const hp = E.hp * TH.hp;
+      w.foes.push({ foe: true, kind, ev, mat: 'ice', x: x0, y: y0, vx: (tx - x0) / d * sp, vy: (ty - y0) / d * sp, a: 0, hp, maxHp: hp,
+        value: Math.round(E.value * relic), xp: E.xp, alive: true, seed: rand(0, 1000), flash: 0, r: 16 });
+      caption('Comet incoming! Laser it before it leaves the field', 'good');
+    } else if (kind === 'derelict') {
+      // a quiet open spot not too far from the ship, with crates around the hull
+      let x = 0, y = 0, ok = false;
+      for (let t = 0; t < 300 && !ok; t++) {
+        const a = rand(0, Math.PI * 2), r = rand(250, 650);
+        x = Math.max(120, Math.min(W - 120, s.x + Math.cos(a) * r)); y = Math.max(120, Math.min(H - 420, s.y + Math.sin(a) * r));
+        ok = openAround(x, y, 95) && !w.wells.some(wl => Math.hypot(wl.x - x, wl.y - y) < wl.r);
+      }
+      if (!ok) { // nowhere open: clear a pocket instead
+        for (let gx = Math.floor((x - 95) / BS); gx <= Math.floor((x + 95) / BS); gx++) for (let gy = Math.floor((y - 95) / BS); gy <= Math.floor((y + 95) / BS); gy++) {
+          const b = w.grid.get(key(gx, gy)); if (b && !b.giant) { b.alive = false; w.grid.delete(key(gx, gy)); w.left--; }
+        }
+      }
+      const value = Math.round(E.crateValue * relic * rand(0.85, 1.15));
+      w.derelict = { x, y, a: rand(0, Math.PI * 2), ev, crates: [] };
+      for (let i = 0; i < E.crates; i++) {
+        const a = i / E.crates * Math.PI * 2 + rand(-0.3, 0.3), r = rand(42, 68);
+        const c = { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, value, alive: true, t: rand(0, 6), crate: true, evaOnly: true, ev };
+        w.relics.push(c); w.derelict.crates.push(c);
+      }
+      caption('Derelict ship spotted! Spacewalk over to grab its salvage crates', 'good');
+    } else if (kind === 'boss') {
+      let x, y, t = 0;
+      do { x = rand(150, W - 150); y = rand(150, H - 700); t++; } while (t < 50 && Math.hypot(x - s.x, y - s.y) < 500);
+      const hp = M.scav.health * E.hp * TH.hp;
+      w.foes.push({ foe: true, kind, ev, mat: 'scav', x, y, vx: 0, vy: 0, a: 0, hp, maxHp: hp, value: Math.round(E.value * relic), xp: E.xp,
+        alive: true, seed: rand(0, 1000), flash: 0, prey: null, eat: 0, wait: 1.5, r: 30, spawn: E.spawnEvery * 0.5, pulse: E.pulseEvery, charge: 0 });
+      caption('Scavenger mothership! It eats the field and launches drones - take it down', 'danger');
+      SM.Audio.alarm();
+    }
+    vibrate([30, 30, 30]);
+    return ev;
+  }
+  function openAround(x, y, r) {
+    for (let gx = Math.floor((x - r) / BS); gx <= Math.floor((x + r) / BS); gx++)
+      for (let gy = Math.floor((y - r) / BS); gy <= Math.floor((y + r) / BS); gy++) if (w.grid.has(key(gx, gy))) return false;
+    return true;
+  }
+  function eventDone(ev, credits) {
+    if (!ev || ev.done) return;
+    ev.done = true; ev.credits += credits || 0;
+    SM.Audio.contract(); vibrate([40, 40, 120]);
+  }
+  function eventFoe() { return w.foes.find(f => f.alive && f.kind); }
+  function updateEvent(dt) {
+    if (w.event && w.elapsed >= w.event.at && w.time > 25) startEvent(w.event.kind);
+    const dr = w.derelict;
+    if (dr && !dr.ev.done && dr.crates.every(c => !c.alive)) { eventDone(dr.ev, 0); caption('Derelict stripped - all crates recovered', 'good'); }
+  }
+  function moveComet(f, dt) {
+    f.x += f.vx * dt; f.y += f.vy * dt; f.a += dt * 2;
+    if (!settings().reducedFx && Math.random() < 0.9) w.particles.push({ x: f.x + rand(-5, 5), y: f.y + rand(-5, 5), vx: -f.vx * 0.6 + rand(-20, 20), vy: -f.vy * 0.6 + rand(-20, 20), t: 0, life: 0.9, color: Math.random() < 0.5 ? '#dff6ff' : '#7fd6ff', size: rand(2, 4) });
+    if (f.x < -80 || f.x > W + 80 || f.y < -80 || f.y > H + 80) { // got away
+      f.alive = false; f.ev.gone = true;
+      if (w.target === f) w.target = null;
+      caption('The comet got away', 'warn');
+    }
+  }
+  function bossActs(f, dt) {
+    const E = D.EVENTS.kinds.boss, s = w.ship;
+    f.spawn -= dt;
+    if (f.spawn <= 0) {
+      f.spawn = E.spawnEvery;
+      const adds = w.foes.filter(o => o.alive && !o.kind && o.mother === f).length;
+      if (adds < E.maxAdds) {
+        const hp = M.scav.health * TH.hp;
+        w.foes.push({ foe: true, mat: 'scav', mother: f, x: f.x, y: f.y, vx: rand(-60, 60), vy: rand(-60, 60), a: 0, hp, maxHp: hp, value: Math.round(M.scav.value * TH.value * 0.5),
+          alive: true, seed: rand(0, 1000), flash: 0, prey: null, eat: 0, wait: 0.5 });
+      }
+    }
+    if (f.charge > 0) {
+      f.charge -= dt;
+      if (f.charge <= 0) {
+        w.fx.push({ kind: 'ring', x: f.x, y: f.y, r: E.pulseR, t: 0, life: 0.4, color: '#ff3d71' });
+        if (!w.eva && Math.hypot(s.x - f.x, s.y - f.y) < E.pulseR + SHIP_R && !shieldBlock()) damage(E.pulseDmg * TH.hazard, 'Mothership pulse');
+        if (w.miner && !inGiant(w.miner) && Math.hypot(w.miner.x - f.x, w.miner.y - f.y) < E.pulseR) w.o2 = Math.max(0, w.o2 - D.EVA.debrisO2);
+      }
+    } else if ((f.pulse -= dt) <= 0) { f.pulse = E.pulseEvery; f.charge = 1.2; if (Math.hypot(s.x - f.x, s.y - f.y) < E.pulseR + 80) caption('Mothership charging a pulse - back off!', 'warn'); }
+  }
+  // Autopilot for events: a steering vector, or undefined when there is nothing to do here.
+  function eventPilot() {
+    const s = w.ship, S = w.S, f = eventFoe();
+    if (f && Math.hypot(f.x - s.x, f.y - s.y) < 1100) {
+      w.target = f; w.apGoal = null;
+      const E = D.EVENTS.kinds.boss;
+      const stand = f.kind === 'boss' ? Math.min(S.range * 0.9, E.pulseR + SHIP_R + 30) : Math.min(S.range * 0.6, 90);
+      const far = Math.hypot(f.x - s.x, f.y - s.y);
+      if (f.kind === 'boss' && far > S.range) { const r = followRoute(f, { x: f.x, y: f.y }); w.target = w.target && w.target.alive ? w.target : f; return r || { x: 0, y: 0 }; } // rock in the way: cut a path
+      const lead = f.kind === 'comet' ? 0.6 : 0.2; // aim ahead of a moving comet
+      const tx = f.x + f.vx * lead, ty = f.y + f.vy * lead, dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy) || 1;
+      const m = Math.max(-0.8, Math.min(1, (d - stand) / 60));
+      return avoid(dx / d * m, dy / d * m) || { x: 0, y: 0 };
+    }
+    const dr = w.derelict;
+    if (dr && !dr.ev.done && settings().autoEva && dr.crates.some(c => c.alive && !c.evaSkip) && w.time > 15) {
+      const dx = dr.x - s.x, dy = dr.y - s.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 110) return { x: 0, y: 0 }; // parked: auto EVA takes it from here
+      return followRoute(dr, { x: dr.x, y: dr.y + 80 }) || { x: 0, y: 0 };
+    }
+    return undefined;
   }
 
   // Field cleared before the timer ran out: warp to the next world and keep mining with the time,
@@ -1000,7 +1143,9 @@ SM.Sortie = (function () {
       wells: world.wells, mines: world.mines, foes: world.foes, regrow: world.regrow, booms: [],
       flare: next.flares ? next.flares.every * 0.6 : 0, flareOn: 0,
       target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0,
-      sentries: [], sentryCd: 1, splitTarget: null, gunTarget: null }); // sentries are left behind; the ship drops new ones
+      sentries: [], sentryCd: 1, splitTarget: null, gunTarget: null, derelict: null }); // sentries are left behind; the ship drops new ones
+    w.events.forEach(e => { if (!e.done) e.gone = true; }); // an unfinished event stays in the old field
+    w.event = rollEvent(next, false);
     const s = w.ship;
     s.x = w.dock.x; s.y = w.dock.y - 30; s.vx = 0; s.vy = 0; s.a = -Math.PI / 2; s.inv = 1.5;
     w.cam.x = w.dock.x; w.cam.y = w.dock.y - 200;
@@ -1161,6 +1306,7 @@ SM.Sortie = (function () {
 
   function collectRelic(r, label) {
     r.alive = false; w.relicCount++; w.relicCredits += r.value; w.credits += r.value; w.xp += 10;
+    if (r.crate) { r.ev.credits += r.value; label = 'Salvage crate'; }
     SM.Audio.contract(); vibrate(50);
     w.pops.push({ x: r.x, y: r.y - 8, text: '+' + r.value + ' relic', t: 0, color: '#f2c14e', size: 16 });
     caption(`${label} +${r.value} cr`, 'good');
@@ -1197,7 +1343,7 @@ SM.Sortie = (function () {
       SM.Audio.zap(); d.wcd = m.cd;
     }
     if (d.gear === 'collector' && !d.relic) {
-      d.relic = w.relics.find(r => r.alive && Math.hypot(r.x - s.x, r.y - s.y) < d.st.reach * 1.5 && !w.wing.some(o => o.relic === r)) || null;
+      d.relic = w.relics.find(r => r.alive && !r.evaOnly && Math.hypot(r.x - s.x, r.y - s.y) < d.st.reach * 1.5 && !w.wing.some(o => o.relic === r)) || null;
     }
   }
   // Shield projectors: returns true if a shield absorbed the hit.
@@ -1403,9 +1549,28 @@ SM.Sortie = (function () {
   function drawWingAndEva() {
     const paint = (D.PAINTS.find(p => p.id === SM.State.get().paint) || D.PAINTS[0]).color;
     const now = performance.now() / 1000;
+    // derelict ship (rare event): a broken hull with its salvage crates around it
+    const dr = w.derelict;
+    if (dr) {
+      g.save(); g.translate(dr.x, dr.y); g.rotate(dr.a + now * 0.05);
+      g.fillStyle = '#2b3240'; g.strokeStyle = '#6c7a93'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(40, 0); g.lineTo(10, -16); g.lineTo(-30, -18); g.lineTo(-36, -6); g.lineTo(-22, 0); g.lineTo(-36, 8); g.lineTo(-28, 18); g.lineTo(12, 15); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = '#1a1f29'; g.lineWidth = 3; g.beginPath(); g.moveTo(-4, -17); g.lineTo(4, -2); g.lineTo(-6, 15); g.stroke(); // hull breach
+      g.fillStyle = Math.floor(now * 2) % 2 ? '#ff9a3c' : '#5a3a1c'; g.beginPath(); g.arc(24, 0, 3, 0, Math.PI * 2); g.fill(); // dying beacon
+      g.restore();
+      if (!dr.ev.done) { g.fillStyle = '#9fb3d9'; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.fillText('DERELICT', dr.x, dr.y - 34); }
+    }
     // relics
     w.relics.forEach(r => {
       if (!r.alive) return;
+      if (r.crate) { // salvage crate (derelict event)
+        g.save(); g.translate(r.x, r.y); g.rotate(Math.sin(now + r.t) * 0.3);
+        g.globalAlpha = 0.3 + 0.2 * Math.sin(now * 4 + r.t); g.fillStyle = '#7fe3ff'; g.fillRect(-11, -11, 22, 22); g.globalAlpha = 1;
+        g.fillStyle = '#8a6a3a'; g.strokeStyle = '#ffd76a'; g.lineWidth = 1.5; g.fillRect(-7, -7, 14, 14); g.strokeRect(-7, -7, 14, 14);
+        g.beginPath(); g.moveTo(-7, 0); g.lineTo(7, 0); g.stroke();
+        g.restore();
+        return;
+      }
       const pulse = 0.6 + Math.sin(now * 4 + r.t) * 0.4;
       g.save(); g.translate(r.x, r.y);
       g.globalAlpha = 0.35 * pulse; g.fillStyle = '#f2c14e';
@@ -1814,7 +1979,7 @@ SM.Sortie = (function () {
       if (d <= r + BS / 2) hits.push([b, d]);
     }
     hits.forEach(([b, d]) => hurtBlock(b, dmg * (d < r * 0.5 ? 1 : 0.6))); // full damage in the middle
-    w.foes.forEach(f => { if (f.alive && Math.hypot(f.x - x, f.y - y) < r + 14) hurtBlock(f, dmg); });
+    w.foes.forEach(f => { if (f.alive && Math.hypot(f.x - x, f.y - y) < r + (f.r || 14)) hurtBlock(f, dmg); });
     w.mines.forEach(m => { if (m.alive && m.arm < 0 && Math.hypot(m.x - x, m.y - y) < r + 20) m.arm = 0.25; }); // chain
     const n = settings().reducedFx ? 10 : 34;
     for (let i = 0; i < n; i++) {
@@ -2095,7 +2260,8 @@ SM.Sortie = (function () {
     });
     // scavenger drones
     w.foes.forEach(f => {
-      if (!f.alive || f.x < vx0 - 30 || f.x > vx1 + 30 || f.y < vy0 - 30 || f.y > vy1 + 30) return;
+      if (!f.alive || f.x < vx0 - 40 || f.x > vx1 + 40 || f.y < vy0 - 40 || f.y > vy1 + 40) return;
+      if (f.kind) return drawEventFoe(f);
       g.save(); g.translate(f.x, f.y); g.rotate(f.a);
       g.fillStyle = f.flash > 0 ? '#fff' : M.scav.color; g.strokeStyle = M.scav.edge; g.lineWidth = 2;
       g.beginPath(); g.moveTo(13, 0); g.lineTo(-9, -10); g.lineTo(-4, 0); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
@@ -2217,6 +2383,36 @@ SM.Sortie = (function () {
       g.beginPath(); g.arc(st.ox + (d ? dx / d * m : 0), st.oy + (d ? dy / d * m : 0), 24, 0, Math.PI * 2); g.fill();
       g.globalAlpha = 1;
     }
+  }
+
+  function drawEventFoe(f) {
+    const hpBar = (wid, y, col) => { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(f.x - wid / 2, f.y + y, wid, 5); g.fillStyle = col; g.fillRect(f.x - wid / 2, f.y + y, wid * Math.max(0, f.hp / f.maxHp), 5); };
+    if (f.kind === 'comet') {
+      const gr = g.createRadialGradient(f.x, f.y, 2, f.x, f.y, 34);
+      gr.addColorStop(0, 'rgba(223,246,255,0.9)'); gr.addColorStop(1, 'rgba(127,214,255,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(f.x, f.y, 34, 0, Math.PI * 2); g.fill();
+      g.save(); g.translate(f.x, f.y); g.rotate(f.a);
+      g.fillStyle = f.flash > 0 ? '#fff' : '#dff6ff'; g.strokeStyle = '#8fc3d9'; g.lineWidth = 2;
+      g.beginPath(); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, r = f.r * (0.8 + ((i * 53) % 10) / 40); g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fill(); g.stroke();
+      g.restore();
+      hpBar(40, -30, '#7fd6ff');
+      g.fillStyle = '#dff6ff'; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.fillText('COMET +' + f.value, f.x, f.y - 36);
+      return;
+    }
+    // scavenger mothership
+    const E = D.EVENTS.kinds.boss;
+    if (f.charge > 0) { // pulse warning
+      g.strokeStyle = 'rgba(255,61,113,' + (0.4 + 0.4 * Math.sin(performance.now() / 60)) + ')'; g.lineWidth = 3; g.setLineDash([8, 6]);
+      g.beginPath(); g.arc(f.x, f.y, E.pulseR * (1 - f.charge / 1.2 * 0.3), 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+    }
+    g.save(); g.translate(f.x, f.y); g.rotate(f.a);
+    g.fillStyle = f.flash > 0 ? '#fff' : '#7a1430'; g.strokeStyle = M.scav.color; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(34, 0); g.lineTo(6, -22); g.lineTo(-24, -26); g.lineTo(-14, -8); g.lineTo(-30, 0); g.lineTo(-14, 8); g.lineTo(-24, 26); g.lineTo(6, 22); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = M.scav.color; g.beginPath(); g.arc(6, 0, 7, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ffd76a'; g.beginPath(); g.arc(8, 0, 3, 0, Math.PI * 2); g.fill();
+    g.restore();
+    hpBar(64, -42, M.scav.color);
+    g.fillStyle = '#ffb3c6'; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.fillText('MOTHERSHIP', f.x, f.y - 48);
   }
 
   function drawDock(d) {
@@ -2358,7 +2554,7 @@ SM.Sortie = (function () {
     if (w.target && w.target.alive) {
       const m = M[w.target.mat];
       ti.hidden = false;
-      $('tName').textContent = m.name;
+      $('tName').textContent = w.target.kind ? D.EVENTS.kinds[w.target.kind].name : m.name;
       $('tValue').textContent = w.target.value + ' cr';
       $('tHp').style.width = (w.target.hp / w.target.maxHp * 100) + '%';
       const dist = Math.hypot(w.target.x - w.ship.x, w.target.y - w.ship.y);
@@ -2381,5 +2577,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _event: kind => w && startEvent(kind), _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
 })();

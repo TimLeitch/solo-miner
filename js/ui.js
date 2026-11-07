@@ -133,6 +133,8 @@ SM.UI = (function () {
       ['Drone bay collected', C.offline], ['Rebirths', s.prestige.count]];
     el.innerHTML = `<h2>Collection log</h2>
       <div class="card"><div class="label">Materials - ${found} / ${mats.length} found</div><div class="coll-grid">${matHtml}</div></div>
+      <div class="card"><div class="label">Rare finds</div>${Object.keys(D.EVENTS.kinds).map(k => { const n = SM.Meta.counter('ev:' + k); return `<div class="sum"><span>${n ? esc(D.EVENTS.kinds[k].name) : '???'}</span><b>${fmt(n)}</b></div>`; }).join('')}
+        <div class="small muted">About ${Math.round(D.EVENTS.chance * 100)}% of fields have one: a comet to shoot, a derelict to salvage on a spacewalk, or a scavenger mothership.</div></div>
       <div class="card"><div class="label">Fields</div>${fieldHtml}</div>
       <div class="card"><div class="label">Records</div>${rec.map(([n, v]) => `<div class="sum"><span>${n}</span><b>${fmt(v || 0)}</b></div>`).join('')}</div>`;
   }
@@ -671,6 +673,11 @@ SM.UI = (function () {
       const endR = D.REGIONS.find(x => x.id === res.endRegion);
       rows += `<div class="sum"><span>Fields cleared x${res.cleared} - reached ${esc(endR ? endR.name : '')}</span><span class="pos">+${fmt(res.clearBonus || 0)}</span></div>`;
     }
+    (res.events || []).forEach(e => {
+      const n = D.EVENTS.kinds[e.kind].name;
+      rows += e.done ? `<div class="sum"><span>&#9733; ${esc(n)}${e.kind === 'derelict' ? ' salvaged' : ' destroyed'}</span><span>${fmt(e.credits)}</span></div>`
+        : `<div class="sum muted"><span>${esc(n)} ${e.kind === 'comet' ? 'got away' : 'left behind'}</span><span>0</span></div>`;
+    });
     if (res.giants > 0) rows += `<div class="sum"><span>Giant rocks cracked x${res.giants} (jackpot)</span><span>${fmt(res.giantCr)}</span></div>`;
     if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;

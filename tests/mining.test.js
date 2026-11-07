@@ -38,6 +38,7 @@ function game(seed) {
   for (const file of ['data', 'state', 'meta', 'sortie']) vm.runInContext(fs.readFileSync(`js/${file}.js`, 'utf8'), sandbox);
   sandbox.SM.Audio = new Proxy({}, { get: () => () => {} });
   sandbox.SM.State.load();
+  sandbox.SM.DATA.EVENTS.chance = 0; // rare events off here so seeded runs stay the same; they have their own tests
   sandbox.SM.State.get().settings.autoEva = false; // off by default here so other tests see the ship alone; auto EVA has its own tests
   sandbox.SM.Sortie.init();
   return {
@@ -798,4 +799,105 @@ test('achievements unlock once from lifetime counters, rank and fields, and pay 
   assert.equal(SM.Meta.unseenAchievements(), 0);
   const all = SM.Meta.achievements();
   assert.ok(all.length > 40 && all.every(a => a.goal > 0 && a.stars > 0));
+});
+
+test('rare events: a comet crosses the field and pays when shot; autopilot chases it', () => {
+  const { SM, advance } = game(21);
+  const s = SM.State.get(); s.tutorial = false; s.levels.laser = 8;
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = [];
+  const ev = SM.Sortie._event('comet');
+  const comet = w.foes.find(f => f.kind === 'comet');
+  assert.ok(comet && comet.value > 0);
+  let res = null;
+  SM.Sortie.start('nearside', { onEnd: r => (res = r) }); // fresh run to check the result plumbing
+  const w2 = SM.Sortie._debug(); w2.debris = [];
+  SM.Sortie._event('comet');
+  const c2 = w2.foes.find(f => f.kind === 'comet');
+  c2.x = w2.ship.x + 60; c2.y = w2.ship.y - 60; c2.vx = 5; c2.vy = 0; // drifting slowly right next to the ship
+  advance(20);
+  assert.equal(c2.alive, false, 'laser broke the comet');
+  assert.equal(w2.events[0].done, true);
+  SM.Sortie.end('return');
+  assert.equal(res.events.length, 1); assert.equal(res.events[0].done, true);
+  assert.ok(res.events[0].credits === c2.value);
+  const meta = SM.Meta.onRun(res);
+  assert.equal(SM.Meta.counter('ev:comet'), 1);
+  assert.ok(meta.achievements.some(a => a.id === 'events.1'));
+  assert.equal(ev.kind, 'comet');
+});
+
+test('rare events: an unshot comet escapes and counts as missed', () => {
+  const { SM, advance } = game(22);
+  const s = SM.State.get(); s.tutorial = false; s.settings.autoFire = false; s.settings.autopilot = false;
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug(); w.debris = [];
+  SM.Sortie._event('comet');
+  const c = w.foes.find(f => f.kind === 'comet');
+  c.vx *= 6; c.vy *= 6;
+  advance(30);
+  assert.equal(c.alive, false);
+  assert.equal(w.events[0].done, false);
+  assert.equal(w.events[0].gone, true);
+});
+
+test('rare events: autopilot parks at a derelict and auto EVA salvages every crate', () => {
+  const { SM, advance } = game(23);
+  const s = SM.State.get(); s.tutorial = false; s.settings.autoEva = true;
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug(); w.debris = [];
+  w.relics.forEach(r => (r.alive = false)); // only the crates are left to fetch
+  SM.Sortie._event('derelict');
+  assert.ok(w.derelict && w.derelict.crates.length === SM.DATA.EVENTS.kinds.derelict.crates);
+  const credits0 = w.credits;
+  advance(100);
+  assert.ok(w.derelict.crates.every(c => !c.alive), `${w.derelict.crates.filter(c => c.alive).length} crates left`);
+  assert.equal(w.derelict.ev.done, true);
+  assert.ok(w.credits - credits0 >= w.derelict.ev.credits);
+});
+
+test('rare events: the mothership launches drones, pulses, and autopilot + guns take it down', () => {
+  const { SM, advance } = game(24);
+  const s = SM.State.get(); s.tutorial = false; s.levels.laser = 12; s.levels.hull = 8; s.hull = 400; s.unlocked.push('comet', 'redshard');
+  SM.Sortie.start('redshard');
+  const w = SM.Sortie._debug(); w.debris = [];
+  SM.Sortie._event('boss');
+  const boss = w.foes.find(f => f.kind === 'boss');
+  assert.ok(boss.maxHp > SM.DATA.MATERIALS.scav.health * 10);
+  advance(90);
+  assert.ok(w.foes.some(f => f.mother === boss), 'launched scavengers');
+  assert.equal(boss.alive, false, `boss hp ${Math.round(boss.hp)} / ${Math.round(boss.maxHp)}`);
+  assert.equal(w.events[0].done, true);
+});
+
+test('rare events roll by chance, never in the tutorial, mothership only from Red Shard', () => {
+  const { SM } = game(25);
+  const s = SM.State.get();
+  SM.DATA.EVENTS.chance = 1;
+  SM.Sortie.start('nearside');
+  assert.equal(SM.Sortie._debug().event, null, 'tutorial');
+  s.tutorial = false;
+  const kinds = new Set();
+  for (let i = 0; i < 60; i++) { SM.Sortie.start('nearside'); kinds.add(SM.Sortie._debug().event.kind); }
+  assert.ok(!kinds.has('boss') && kinds.has('comet') && kinds.has('derelict'));
+  s.unlocked.push('comet', 'redshard');
+  for (let i = 0; i < 60; i++) { SM.Sortie.start('redshard'); kinds.add(SM.Sortie._debug().event.kind); }
+  assert.ok(kinds.has('boss'));
+  SM.DATA.EVENTS.chance = 0;
+  SM.Sortie.start('nearside');
+  assert.equal(SM.Sortie._debug().event, null);
+});
+
+test('every field plays each rare event on autopilot + auto EVA without errors', () => {
+  const { SM, advance } = game(26);
+  const s = SM.State.get(); s.tutorial = false; s.settings.autoEva = true;
+  SM.DATA.REGIONS.forEach(r => { if (!s.unlocked.includes(r.id)) s.unlocked.push(r.id); });
+  for (const kind of ['comet', 'derelict', 'boss']) for (const r of SM.DATA.REGIONS) {
+    SM.Sortie.start(r.id);
+    SM.Sortie._event(kind);
+    advance(25);
+    assert.ok(SM.Sortie._debug() === null || SM.Sortie._debug().events.length >= 1, `${kind} in ${r.id}`);
+    if (SM.Sortie.isRunning()) SM.Sortie.end('return');
+  }
 });

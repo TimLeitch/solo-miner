@@ -178,7 +178,7 @@ SM.Meta = (function () {
     add('giants', res.giants || 0);
     add('scavs', res.foeKills || 0);
     add('clears', res.cleared || 0);
-    add('events', (res.events || []).filter(e => e.done).length);
+    (res.events || []).filter(e => e.done).forEach(e => { add('events', 1); add('ev:' + e.kind, 1); });
     Object.keys(res.byMat || {}).forEach(id => add('mat:' + id, res.byMat[id]));
     const f = meta().fields, r = res.region;
     f[r] = f[r] || { runs: 0, best: 0, cleared: 0 };
