@@ -277,6 +277,19 @@ Tim: "Let's add an automatic EVA system, just like we have autopilot, auto weapo
 - **[NEEDS DECISION]** **Free or bought?** I made it a free setting like autopilot. It could instead be a module you buy (e.g. an "EVA suit computer" in Upgrades > Miner) if you want another reason to spend credits. Say which.
 - **[NEEDS DECISION]** **On by default?** It is on for everyone, including existing saves. Relic runs pause the ship for a few seconds while the miner is out. Turn it off by default instead?
 
+### Auto upgrade (added 2026-11-07 at Tim's request)
+
+Tim: "So as they're getting money and collecting things, they can turn on auto upgrade and the game will choose what to upgrade for them and will automatically do it. It can be a lot like the autopilot feature. It's just turned on and it does all auto upgrades, or they can turn it off."
+
+- **[DONE]** On/off switch at the top of the **Upgrades** screen (shows what it will buy next) and in **Settings** as *Auto upgrade*. Free setting like autopilot, saved as `settings.autoUpgrade`.
+- **[DONE]** While it is on, the hangar checks every second and buys whatever it can afford: after a sortie, after collecting the drone, after the welcome-back payout. Never during a sortie (sortie credits are only banked when you dock anyway). A toast lists what it bought, e.g. "Auto upgrade: Mining laser Lv 3, Heat sink Lv 3 +10 more (-2,400 cr)".
+- **[DONE]** **How it chooses:** each upgrade gets a score = next price x a weight; it buys the lowest score first. Lower weight = favoured: laser and heat sink 1, drone bay 0.9, thrusters/fuel/hull 1.2, ... repair training 2, reinforced suit 2.2. So money spreads over everything, leaning toward what makes runs pay. If the top pick is too dear it saves up for it, but still buys anything costing a quarter of it or less. All weights are in `DATA.AUTO_UPGRADE` (`js/data.js`).
+- **[DONE]** It always keeps enough credits to fully repair the hull.
+- **[DONE]** It levels what you already have: Shuttle, Miner, drone bay, ship weapons & systems (fitting one counts), each escort drone's lasers/heat sinks/engines, owned secondary weapons and owned automation modules. It skips Wide beam, Split beam and Wide drill head once they reach 100% (more levels do nothing).
+- **[DONE]** Tests: off by default and buys nothing while off; spends across several upgrades and keeps repair money; never buys new drones/weapons/modules but levels owned ones; stops at capped side cuts. `node --test tests/` 32 pass. Checked in Chromium at 360x740 (no errors). Service worker cache bumped to v25.
+- **[NEEDS DECISION]** **New purchases:** it never buys a new escort drone, a new secondary weapon, a new automation module or a drone module (those felt like your choices and are big spends). Should it buy those too?
+- **[NEEDS DECISION]** **Off by default** (spending is not undoable). Turn it on by default for new players instead? And are the weights right (e.g. should it favour the drone bay more for offline gains)?
+
 ### Ship weapons & systems: wide beam, miniguns, sentries and more (added 2026-11-07 at Tim's request)
 
 Tim: "a widening of the laser, kind of like the miner has the widening ... some miniguns, some sentries, about 5 or 6 new upgrades to the ship that will make it even better and stronger."
@@ -426,6 +439,7 @@ Players can make an account (email + password), sign in on any phone or computer
 9. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
 10. **Ship weapons & systems:** are the prices and power right, should they unlock by rank or field, and should sentries be placed by hand? (See *Ship weapons & systems* above.)
 11. **Auto EVA:** keep it a free setting that is on by default, or make it a bought upgrade / off by default? (See *Auto EVA* above.)
+12. **Auto upgrade:** should it also buy new escort drones, weapons and modules, should it be on by default, and are the weights right? (See *Auto upgrade* above.)
 
 ## Game Design Document
 

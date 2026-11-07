@@ -54,6 +54,7 @@ SM.UI = (function () {
         renderDrone();
         if (open) $('droneCard').querySelector('details').open = true;
       }
+      runAutoUpgrade();
       $('upDot').hidden = !affordableAny();
     }, 1000);
     $('modal').addEventListener('click', e => { if (e.target.id === 'modal' && !$('modal').dataset.locked) closeModal(); });
@@ -224,7 +225,38 @@ SM.UI = (function () {
   }
   function pct(v) { return (v >= 0 ? '+' : '') + Math.round(v * 100) + '%'; }
 
+  // ---------- auto upgrade (settings.autoUpgrade) ----------
+  // Runs every second in the hangar (never during a sortie) and spends whatever new credits came in.
+  function runAutoUpgrade() {
+    if (document.body.classList.contains('in-sortie')) return false;
+    const r = St.autoUpgrade();
+    if (!r.bought.length) return false;
+    SM.Audio.buy();
+    const names = r.bought.map(b => `${b.name} Lv ${b.lv}`);
+    const total = r.bought.reduce((a, b) => a + b.cost, 0);
+    toast(`Auto upgrade: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3} more` : ''} (-${fmt(total)} cr)`);
+    r.unlocked.forEach(x => toast(`New field unlocked: ${x.name}!`));
+    render();
+    return true;
+  }
+  function renderAutoUpCard() {
+    const el = $('autoUpCard'); if (!el) return;
+    const s = St.get(), on = !!s.settings.autoUpgrade;
+    const next = St.autoUpgradeOptions()[0], reserve = St.autoUpgradeReserve();
+    const status = !on ? 'Off. Turn it on and the hangar buys upgrades for you as credits come in.'
+      : next ? `Next: <b>${esc(next.name)} Lv ${next.lv}</b> (${fmt(next.cost)} cr)${reserve > 0 ? ` - keeping ${fmt(reserve)} cr for repairs` : ''}`
+      : 'Everything it can buy is maxed out.';
+    el.innerHTML = `<label class="setting"><span><b>Auto upgrade</b><br><span class="small muted">${status}</span></span>
+      <input type="checkbox" class="switch" id="autoUpTgl" ${on ? 'checked' : ''} aria-label="Auto upgrade"></label>`;
+    $('autoUpTgl').addEventListener('change', e => {
+      s.settings.autoUpgrade = e.target.checked; St.save(); SM.Audio.click();
+      toast(`Auto upgrade ${s.settings.autoUpgrade ? 'on' : 'off'}`);
+      if (!runAutoUpgrade()) render();
+    });
+  }
+
   function renderUpgrades() {
+    renderAutoUpCard();
     const list = $('upgradeList');
     let html = '';
     const S = St.stats();
@@ -579,6 +611,7 @@ SM.UI = (function () {
       ${sw('autoBoost', 'Auto-boost', 'Boosts while flying when energy allows (burns more fuel)')}
       ${sw('autopilot', 'Autopilot', 'When you stop steering, fly to the next block and mine it')}
       ${sw('autoEva', 'Auto EVA', 'When you stop steering, the miner spacewalks by itself: into giant rocks (autopilot parks at the hatch) and out to relics in reach')}
+      ${sw('autoUpgrade', 'Auto upgrade', 'In the hangar, buys upgrades for you as credits come in (keeps enough for repairs; never buys new drones, weapons or modules)')}
       ${sw('leftHanded', 'Left-handed layout', 'Buttons on the left, steer on the right')}
       ${sw('highContrast', 'High-contrast mode')}
       ${sw('captions', 'Captions', 'Text for warnings and audio cues')}

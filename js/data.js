@@ -321,6 +321,25 @@ SM.DATA = (function () {
     ],
   };
 
+  // Auto upgrade (added 2026-11-07 at Tim's request): a free on/off setting (settings.autoUpgrade). While it is on, the
+  // hangar keeps buying upgrades whenever you can afford one. Each pick is the upgrade with the lowest  price x weight
+  // (lower weight = bought sooner/more often), so it spreads money over everything and leans toward what makes runs pay.
+  // It only levels what you already have: Shuttle, Miner, drone bay, ship weapons & systems, each escort drone's
+  // laser/cooling/engine, owned secondary weapons and owned automation modules. It never buys a new escort drone, a new
+  // secondary weapon, a new automation module or a drone module: those stay your choice.
+  // reserveRepair: keep enough credits to fully repair the hull. maxPerTick: most purchases in one go (per second).
+  const AUTO_UPGRADE = {
+    reserveRepair: true,
+    maxPerTick: 25,
+    weights: {
+      laser: 1, heatsink: 1, drone: 0.9, thruster: 1.2, fuel: 1.2, hull: 1.2, reactor: 1.4, targeting: 1.4, scanner: 1.6,
+      wide: 1.3, split: 1.3, minigun: 1.4, sentry: 1.5, pd: 1.8, deflector: 1.8,
+      drill: 1.3, bit: 1.5, eva: 1.5, o2: 1.5, repair: 2, suit: 2.2, fscan: 1.8,
+      wingDrone: 1.2, weapon: 1.6, module: 1.8,
+    },
+    defaultWeight: 1.5,
+  };
+
   // Field-clear bonus: break every block before the timer and the run pays out, then warps to the next world.
   //   payout = fieldCredits x (pct + perSec x secondsLeft) x (1 + streak x (fieldsClearedThisSortie - 1)), + region bonus x THREAT value
   //   it is banked safely (an emergency return never cuts it), adds `time` seconds to the clock, and refills `fuel` of the tank.
@@ -347,5 +366,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR, GIANT, giantCount };
+  return { MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

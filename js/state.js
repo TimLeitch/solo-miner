@@ -33,7 +33,7 @@ SM.State = (function () {
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
       settings: {
         volume: 0.6, vibration: true, shake: true, reducedFx: false,
-        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, autoEva: true, leftHanded: false,
+        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, autoEva: true, autoUpgrade: false, leftHanded: false,
         highContrast: false, uiScale: 1, stickOpacity: 0.5, captions: true,
       },
     };
@@ -320,6 +320,56 @@ SM.State = (function () {
     save(); return true;
   }
   function toggleAuto(id, on) { if (!autoLvl(id)) return; s.auto.on[id] = on == null ? !autoOn(id) : !!on; save(); }
+  // ---------- Auto upgrade (settings.autoUpgrade, DATA.AUTO_UPGRADE) ----------
+  // Every upgrade the auto buyer may pick right now: { key, name, level after buying, cost, score, buy() }.
+  function autoUpgradeOptions() {
+    const A = D.AUTO_UPGRADE, w = k => A.weights[k] != null ? A.weights[k] : A.defaultWeight;
+    const out = [];
+    const capped = { wide: D.SHIP_GEAR.wide.max, split: D.SHIP_GEAR.split.max, bit: 1 }; // side burn / second beam / side cut stop at 100%
+    [...D.SHUTTLE, ...D.MINER, { id: 'drone', name: 'Mining drone bay' }].forEach(u => {
+      if (capped[u.id] != null && u.per * (lvl(u.id) - 1) >= capped[u.id]) return;
+      const c = upgradeCost(u.id);
+      if (c != null) out.push({ key: u.id, name: u.name, lv: lvl(u.id) + 1, cost: c, score: c * w(u.id), buy: () => buy(u.id) });
+    });
+    s.wing.drones.forEach((d, i) => D.WING.upgrades.forEach(u => {
+      const c = droneUpCost(i, u.id);
+      if (c != null) out.push({ key: `wing${i}.${u.id}`, name: `${u.name} (drone ${i + 1})`, lv: d.lv[u.id] + 1, cost: c, score: c * w('wingDrone'), buy: () => buyDroneUp(i, u.id) });
+    }));
+    D.WEAPONS.forEach(d => {
+      if (!weaponLvl(d.id)) return; // never buys a new weapon
+      const c = weaponCost(d.id);
+      if (c != null) out.push({ key: 'w.' + d.id, name: d.name, lv: weaponLvl(d.id) + 1, cost: c, score: c * w('weapon'), buy: () => buyWeapon(d.id) });
+    });
+    D.AUTO.modules.forEach(m => {
+      if (!autoLvl(m.id)) return; // never buys a new module
+      const c = autoCost(m.id);
+      if (c != null) out.push({ key: 'a.' + m.id, name: m.name, lv: autoLvl(m.id) + 1, cost: c, score: c * w('module'), buy: () => buyAuto(m.id) });
+    });
+    return out.sort((a, b) => a.score - b.score);
+  }
+  // Credits the auto buyer leaves alone (enough to fully repair the hull).
+  function autoUpgradeReserve() { return D.AUTO_UPGRADE.reserveRepair ? repairCost() : 0; }
+  // Buy upgrades while the setting is on and something affordable is left.
+  // Returns { bought: [{ name, lv (latest), cost (total) }], unlocked: [regions] }.
+  // Picks the best-scoring option; if that one is too dear it waits for it rather than spending on worse picks, unless
+  // the cheaper pick costs at most a quarter of it (so small upgrades still trickle in while saving up).
+  function autoUpgrade(force) {
+    if (!force && !s.settings.autoUpgrade) return { bought: [], unlocked: [] };
+    const bought = new Map();
+    for (let n = 0; n < D.AUTO_UPGRADE.maxPerTick; n++) {
+      const budget = s.credits - autoUpgradeReserve();
+      const opts = autoUpgradeOptions();
+      if (!opts.length) break;
+      const best = opts[0];
+      const pick = best.cost <= budget ? best : opts.find(o => o.cost <= budget && o.cost <= best.cost * 0.25);
+      if (!pick || !pick.buy()) break;
+      bought.set(pick.key, { name: pick.name, lv: pick.lv, cost: (bought.get(pick.key)?.cost || 0) + pick.cost });
+    }
+    const unlocked = bought.size ? checkUnlocks() : [];
+    if (unlocked.length) save();
+    return { bought: [...bought.values()], unlocked };
+  }
+
   // Credits for one bought shot of weapon id (autoloader levels make it cheaper).
   function reloadCost(id, lv) {
     const l = lv == null ? autoLvl('loader') : lv;
@@ -478,6 +528,7 @@ SM.State = (function () {
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     autoDef, autoLvl, autoOn, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
+    autoUpgradeOptions, autoUpgradeReserve, autoUpgrade,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,
   };

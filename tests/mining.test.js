@@ -592,3 +592,54 @@ test('every field plays two minutes with autopilot and auto EVA without errors',
   }
   assert.ok(evas > 0, `auto EVA went out in ${evas} fields`);
 });
+
+test('auto upgrade: off by default and buys nothing while off', () => {
+  const { SM } = game(5);
+  const st = SM.State.get();
+  assert.equal(st.settings.autoUpgrade, false);
+  st.credits = 5000;
+  assert.equal(SM.State.autoUpgrade().bought.length, 0);
+  assert.equal(st.credits, 5000);
+});
+
+test('auto upgrade: spends credits across several upgrades, cheapest-weighted first, keeps repair money', () => {
+  const { SM } = game(6);
+  const st = SM.State.get();
+  st.settings.autoUpgrade = true;
+  st.hull = 40; // damaged: keep enough to repair
+  const reserve = SM.State.repairCost();
+  assert.ok(reserve > 0);
+  st.credits = 3000 + reserve;
+  const r = SM.State.autoUpgrade();
+  assert.ok(r.bought.length >= 5, `bought ${r.bought.length}`);
+  assert.ok(st.credits >= SM.State.repairCost(), 'repair money kept');
+  assert.ok(SM.State.lvl('laser') >= 3 && SM.State.lvl('heatsink') >= 3, 'laser and heat sink lead');
+  // first pick at a fresh save is the laser or heat sink (80 cr, weight 1)
+  assert.ok(st.levels.laser > 1 && st.levels.heatsink > 1);
+  // nothing affordable left (within the quarter rule): a second call buys nothing
+  assert.equal(SM.State.autoUpgrade().bought.length, 0);
+});
+
+test('auto upgrade: never buys new drones, weapons or modules, but levels owned ones; stops at capped side cuts', () => {
+  const { SM } = game(7);
+  const st = SM.State.get();
+  st.settings.autoUpgrade = true;
+  st.credits = 1e6;
+  st.levels.bit = 5; st.levels.wide = 5; // already at 100% side cut / side burn
+  SM.State.autoUpgrade();
+  assert.equal(st.wing.count, 0);
+  assert.equal(Object.keys(st.weapons.owned).length, 0);
+  assert.equal(Object.keys(st.auto.lv).length, 0);
+  assert.equal(st.levels.bit, 5);
+  assert.equal(st.levels.wide, 5);
+  // with a drone, a weapon and a module owned, those get levelled too
+  st.wing.count = 1; st.wing.drones.push({ lv: { wlaser: 1, wcool: 1, wengine: 1 }, weapon: null, gear: null, owned: {} });
+  const wid = SM.DATA.WEAPONS[0].id;
+  st.weapons.owned[wid] = 1; st.auto.lv.racks = 1;
+  st.credits = 1e6;
+  SM.State.autoUpgrade(); SM.State.autoUpgrade(); SM.State.autoUpgrade();
+  assert.ok(st.wing.drones[0].lv.wlaser > 1, 'drone laser levelled');
+  assert.ok(st.weapons.owned[wid] > 1, 'weapon levelled');
+  assert.ok(st.auto.lv.racks > 1, 'module levelled');
+  assert.equal(st.wing.count, 1);
+});
