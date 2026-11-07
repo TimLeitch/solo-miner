@@ -117,8 +117,7 @@ SM.Cloud = (function () {
     });
   }
   async function fsError(r) {
-    let j = await r.json().catch(() => ({}));
-    if (Array.isArray(j)) j = j[0] || {}; // query endpoints answer with a list
+    const j = await r.json().catch(() => ({}));
     const e = j.error || {};
     if (e.status === 'PERMISSION_DENIED') return new CloudError(ERRORS.PERMISSION_DENIED);
     return new CloudError(nice(e.status || e.message || ('HTTP ' + r.status)));
@@ -193,7 +192,7 @@ SM.Cloud = (function () {
           let result;
           if (!remote) result = await push(null);
           else if (l && remote.updateTime === l.updateTime) {
-            if (!isDirty) { lastSync = Date.now(); postBoard().catch(boardFail); return setStatus('synced'); }
+            if (!isDirty) { lastSync = Date.now(); return setStatus('synced'); }
             result = await push(remote.updateTime);
           } else if (!isDirty || St.isFresh()) { adopt(remote); lastSync = Date.now(); return setStatus('synced'); }
           else if (St.isFresh(remote.save)) result = await push(remote.updateTime);
@@ -203,7 +202,7 @@ SM.Cloud = (function () {
             result = await push(remote.updateTime);
             if (result === 'ok' && SM.UI) SM.UI.toast('This device\'s progress is now your cloud save');
           }
-          if (result === 'ok') { postBoard().catch(boardFail); return setStatus('synced'); }
+          if (result === 'ok') return setStatus('synced');
         }
         throw new CloudError('Cloud save kept changing; will try again shortly.');
       } catch (e) { fail(e); }
@@ -257,124 +256,10 @@ SM.Cloud = (function () {
     if (SM.UI) { SM.UI.goto('home'); }
   }
   async function deleteAccount() {
-    try { await net(boardUrl('/leaderboard/' + encodeURIComponent(auth.uid)), { method: 'DELETE', headers: { Authorization: 'Bearer ' + await token() } }); } catch (e) { /* best effort */ }
     const r = await fs('DELETE');
     if (!r.ok && r.status !== 404) throw await fsError(r);
     await idp('accounts:delete', { idToken: await token() });
     forgetAccount();
-  }
-
-  // ---------- leaderboards (added 2026-11-07) ----------
-  // One public entry per player at leaderboard/{uid} = { name, allTime, best, rank, ach, shards, updatedAt }.
-  // Written after a successful sync when the numbers changed (never mid-sortie). Read with a Firestore query
-  // ordered by one field. Needs the leaderboard rule from the README; until then the board says so and the game
-  // carries on. Signed-out players can read the board (if the rule allows it) but are not on it.
-  const BOARDS = { allTime: 'Credits ever', best: 'Best sortie', rank: 'Rank', ach: 'Awards' };
-  const BOARD_TTL = 2 * 60 * 1000;
-  let boardCache = {}, boardErr = '', boardField = 'allTime';
-  function boardUrl(path) { return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg.projectId)}/databases/(default)/documents${path}`; }
-  function callsign() {
-    const b = St.get().board;
-    return (b && b.name) || ('Miner ' + (auth ? auth.uid.slice(0, 4).toUpperCase() : ''));
-  }
-  function validName(n) { return /^[A-Za-z0-9 _.\-]{3,16}$/.test(n) && n.trim().length >= 3; }
-  function boardFields() {
-    const s = St.get();
-    return { name: callsign(), allTime: Math.floor(St.allTimeCredits()), best: Math.floor(s.stats.best || 0), rank: St.rank(),
-      ach: Object.keys((s.meta && s.meta.ach) || {}).length, shards: (s.prestige && s.prestige.shards) || 0 };
-  }
-  const toFs = o => { const f = {}; Object.keys(o).forEach(k => (f[k] = typeof o[k] === 'string' ? { stringValue: o[k] } : { integerValue: String(Math.floor(o[k])) })); return f; };
-  const fromFs = f => { const o = {}; Object.keys(f || {}).forEach(k => (o[k] = 'stringValue' in f[k] ? f[k].stringValue : Number(f[k].integerValue || f[k].doubleValue || 0))); return o; };
-  // Upload this player's entry if anything on it changed. Returns 'ok' | 'same' | 'off'.
-  async function postBoard(force) {
-    if (!enabled() || !auth) return 'off';
-    const l = link(), f = boardFields(), sig = JSON.stringify(f);
-    if (!force && l && l.boardSig === sig) return 'same';
-    const r = await net(boardUrl('/leaderboard/' + encodeURIComponent(auth.uid)), {
-      method: 'PATCH', headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: toFs(Object.assign({ updatedAt: Date.now() }, f)) }),
-    });
-    if (!r.ok) throw await fsError(r);
-    boardErr = ''; boardCache = {};
-    if (link()) { link().boardSig = sig; St.save(true); } // device bookkeeping: not part of the synced progress
-    return 'ok';
-  }
-  function boardFail(e) {
-    if (e instanceof Offline) return;
-    boardErr = /refused|PERMISSION/i.test(e.message) ? 'rules' : e.message;
-    console.warn('Leaderboard:', e);
-  }
-  // Top 50 for one board, plus this player's place: { rows: [{ uid, name, allTime, ... }], mine: n or null, at }
-  async function fetchBoard(field, fresh) {
-    const c = boardCache[field];
-    if (c && !fresh && Date.now() - c.at < BOARD_TTL) return c;
-    const headers = { 'Content-Type': 'application/json' };
-    if (auth) headers.Authorization = 'Bearer ' + await token();
-    const from = [{ collectionId: 'leaderboard' }];
-    const r = await net(boardUrl(':runQuery'), { method: 'POST', headers,
-      body: JSON.stringify({ structuredQuery: { from, orderBy: [{ field: { fieldPath: field }, direction: 'DESCENDING' }], limit: 50 } }) });
-    if (!r.ok) throw await fsError(r);
-    const j = await r.json();
-    const rows = (Array.isArray(j) ? j : []).filter(x => x.document).map(x => Object.assign({ uid: x.document.name.split('/').pop() }, fromFs(x.document.fields)));
-    let mine = null;
-    if (auth) {
-      const i = rows.findIndex(x => x.uid === auth.uid);
-      if (i >= 0) mine = i + 1;
-      else try { // outside the top 50: count everyone ahead (best effort)
-        const a = await net(boardUrl(':runAggregationQuery'), { method: 'POST', headers, body: JSON.stringify({ structuredAggregationQuery: {
-          structuredQuery: { from, where: { fieldFilter: { field: { fieldPath: field }, op: 'GREATER_THAN', value: { integerValue: String(boardFields()[field]) } } } },
-          aggregations: [{ alias: 'n', count: {} }] } }) });
-        if (a.ok) { const aj = await a.json(); const n = aj[0] && aj[0].result && aj[0].result.aggregateFields && aj[0].result.aggregateFields.n; if (n) mine = Number(n.integerValue) + 1; }
-      } catch (e) { /* place unknown */ }
-    }
-    return (boardCache[field] = { rows, mine, at: Date.now() });
-  }
-  // Career > Leaders. Always shows your own numbers; the online part degrades to a message.
-  function renderBoard(el) {
-    const me = boardFields(), F = boardField;
-    const tabs = Object.keys(BOARDS).map(k => `<button class="chip ${k === F ? 'on' : ''}" data-board="${k}">${BOARDS[k]}</button>`).join('');
-    const val = (row, k) => k === 'rank' ? 'Rank ' + row.rank : k === 'ach' ? row.ach + ' awards' : fmt(row[k]) + ' cr';
-    el.innerHTML = `<h2>Leaderboards</h2>
-      <div class="card"><div class="row"><div><div class="label">You${auth ? '' : ' (not on the board)'}</div><b>${esc(auth ? me.name : 'Sign in to join')}</b></div>
-        ${auth ? '<button class="btn ghost small-btn" id="lbName">Change name</button>' : enabled() ? '<button class="btn gold small-btn" data-account>Sign in</button>' : ''}</div>
-        <div class="sum"><span>Credits ever</span><b>${fmt(me.allTime)} cr</b></div><div class="sum"><span>Best sortie</span><b>${fmt(me.best)} cr</b></div>
-        <div class="sum"><span>Rank</span><b>${me.rank}</b></div><div class="sum"><span>Awards</span><b>${me.ach}</b></div></div>
-      <div class="lb-tabs">${tabs}</div>
-      <div class="card" id="lbList"><div class="small muted">${enabled() ? 'Loading...' : 'Leaderboards need cloud saves, which are not switched on for this copy of the game.'}</div></div>`;
-    el.querySelectorAll('[data-board]').forEach(b => b.addEventListener('click', () => { boardField = b.dataset.board; if (SM.Audio) SM.Audio.click(); renderBoard(el); }));
-    if ($('lbName')) $('lbName').addEventListener('click', editName);
-    if (!enabled()) return;
-    const list = $('lbList');
-    const show = d => {
-      if (!list.isConnected) return;
-      if (!d.rows.length) { list.innerHTML = '<div class="small muted">Nobody on this board yet. Fly a sortie while signed in to be first!</div>'; return; }
-      list.innerHTML = d.rows.map((r, i) => `<div class="sum lb-row ${auth && r.uid === auth.uid ? 'me' : ''}"><span><b>${i + 1}.</b> ${esc(r.name || 'Miner')}${r.shards ? ` <span class="small muted">&#9670;${r.shards}</span>` : ''}</span><span>${val(r, F)}</span></div>`).join('')
-        + (auth && d.mine && d.mine > 50 ? `<div class="sum lb-row me"><span><b>${d.mine}.</b> ${esc(me.name)}</span><span>${val(me, F)}</span></div>` : '')
-        + `<div class="small muted" style="margin-top:6px">${auth ? (d.mine ? `You are #${d.mine}. ` : 'Your entry uploads after your next sync. ') : ''}Updated ${ago(d.at)}.</div>`;
-    };
-    const go = () => fetchBoard(F).then(show).catch(e => {
-      if (!list.isConnected) return;
-      const rules = /refused|PERMISSION/i.test(e.message) || boardErr === 'rules';
-      list.innerHTML = `<div class="small muted">${e instanceof Offline ? "You're offline - the board loads when you reconnect. Your own records are above."
-        : rules ? 'The online leaderboard is not switched on yet (the game owner needs to add one Firestore rule - see the README).' : esc(e.message)}</div>`;
-    });
-    if (auth) postBoard().catch(boardFail).then(go); else go();
-  }
-  function editName() {
-    SM.UI.openModal(`<h2>Leaderboard name</h2>
-      <p class="small">3-16 letters, numbers, spaces, dots, dashes or underscores. Everyone can see it.</p>
-      <label class="field"><input id="lbNameIn" maxlength="16" value="${esc(callsign())}"></label>
-      <div class="small acct-msg neg" id="lbNameMsg"></div>
-      <button class="btn" id="lbNameSave">Save</button><button class="btn ghost" id="lbNameCancel">Cancel</button>`);
-    $('lbNameCancel').addEventListener('click', SM.UI.closeModal);
-    $('lbNameSave').addEventListener('click', async () => {
-      const n = $('lbNameIn').value.trim().replace(/\s+/g, ' ');
-      if (!validName(n)) { $('lbNameMsg').textContent = 'Use 3-16 letters, numbers, spaces, . - or _'; return; }
-      const s = St.get(); s.board = Object.assign({}, s.board, { name: n }); St.save();
-      SM.UI.closeModal(); SM.UI.render();
-      try { await postBoard(true); SM.UI.toast('Name saved'); SM.UI.render(); }
-      catch (e) { boardFail(e); SM.UI.toast(e instanceof Offline ? 'Name saved - uploads when you are online' : 'Name saved on this device; the board could not be updated'); }
-    });
   }
 
   // ---------- UI ----------
@@ -522,6 +407,5 @@ SM.Cloud = (function () {
     if (auth && enabled()) sync();
   }
 
-  return { init, sync, tick, flush, enabled, signedIn, openAccount, homeCardHtml, refreshUi, status: () => status,
-    renderBoard, postBoard, fetchBoard, boardFields, validName, _setAuth: a => (auth = a) };
+  return { init, sync, tick, flush, enabled, signedIn, openAccount, homeCardHtml, refreshUi, status: () => status };
 })();

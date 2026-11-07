@@ -331,7 +331,7 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 
 - **[DONE]** New **Career** tab (star icon) with a **Rebirth** page. Once you have earned **25,000 cr lifetime** you can start over for **core shards**: `shards = floor(sqrt(lifetime credits this life / 25,000))` (25k = 1, 100k = 2, 225k = 3, 1M = 6, 4M = 12).
 - **[DONE]** Every core shard you own gives **+10% to all credits** (blocks, relics, bounties, clear bonus, giant jackpots, contracts, orders - it rides on Threat value) and **+10% to the drone bay**. Shown on the Rebirth page and in the drone bay's "How it's calculated".
-- **[DONE]** Resets: wallet, upgrades, drone bay level, fields (back to Nearside), escort drones, weapons, automation modules, active contracts, first-survey bonuses (paid again). The drone bay is collected first. Keeps: rank/XP, stars, cosmetics, orders and streak, achievements, collection log, settings, account. Lifetime credits of earlier lives are kept as `prestige.allTime` (used by the leaderboard).
+- **[DONE]** Resets: wallet, upgrades, drone bay level, fields (back to Nearside), escort drones, weapons, automation modules, active contracts, first-survey bonuses (paid again). The drone bay is collected first. Keeps: rank/XP, stars, cosmetics, orders and streak, achievements, collection log, settings, account. Lifetime credits of earlier lives are kept as `prestige.allTime` (counted by the Prospector achievement).
 - **[DONE]** Confirmation dialog shows the gain; a gold dot on Career when your first rebirth is available. Tunables in `DATA.PRESTIGE`. Test: reset/keep lists, +20% block values and drone rate after 2 shards, save round trip.
 - **[NEEDS DECISION]** Keeping **rank** across rebirths (rank adds laser power, so the second life starts a bit stronger). Reset rank too? And is 25k the right first rebirth point (about when Scrapyard / Glass Moon open)?
 
@@ -371,16 +371,6 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - Numbers in `DATA.SILO`. Tests: silo adds hours, banks earnings first, stops at the max, auto upgrade offers it; a full bin still reports after an hour with the hours lost.
 - **[NEEDS DECISION]** 72h max and 2h per level: OK? (A 3-day max means a weekend away is fully paid once upgraded.)
 
-### Leaderboards (added 2026-11-07 at Tim's request)
-
-- **[ACTION NEEDED - Tim]** In the Firebase console: **Firestore Database > Rules**, add the `match /leaderboard/{uid} { ... }` block shown in step 4 of *Firebase setup* below (next to the existing `saves` block) and **Publish**. Until then the board says "not switched on yet" and everything else works as before. (Checked against the live project 2026-11-07: reads are refused with PERMISSION_DENIED, which the game handles.)
-- **[DONE]** **Career > Top**: four boards - **Credits ever** (all lives, so rebirths don't knock you down), **Best sortie**, **Rank**, **Awards** (achievements earned). Top 50 with your row highlighted, and your place even if you're outside the top 50 (a Firestore count query). Your own numbers always show, even offline or signed out.
-- **[DONE]** Uses the existing cloud layer (`js/cloud.js`, Firestore REST, no SDK). One public entry per player at `leaderboard/{uid}` = `{ name, allTime, best, rank, ach, shards, updatedAt }`. It uploads after a successful cloud sync, only when a number changed (never mid-sortie), and when you change your name. Deleting your account deletes your entry too.
-- **[DONE]** Name: defaults to "Miner" + 4 characters of your account id; **Change name** takes 3-16 letters / numbers / spaces / `. - _` (checked in the game and in the rule).
-- **[DONE]** Degrades cleanly: cloud saves off = message; signed out = can view, "Sign in to join"; offline = "loads when you reconnect"; rule missing = "not switched on yet". Board reads are cached for 2 minutes (50 reads per view, so the free tier covers about 1,000 views a day).
-- Tests (fake Firestore with the real error shapes): posts once per change without touching the save hash, parses the top list and your place, name rules, permission denied fails cleanly, signed out never writes.
-- **[NEEDS DECISION]** **Cheating:** scores come from the player's device, so a determined player could post fake numbers (the rule only caps them at sane ranges). Fine for a friends-scale game; a server check (Cloud Function) would be the next step if it matters. Also: should signed-out players see the board (now yes), and do you want weekly boards that reset?
-
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.
@@ -398,7 +388,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] The drone bay keeps earning across devices (its timer travels with the save).
 - [DONE] Tested against a mock Firebase in a headless phone browser: sign up, wrong password, new device adopts cloud save, progress moves between two devices both ways, conflict prompt, offline play then upload on reconnect, stays signed in after reload, sign out and clear. Tested against the real Firebase project on 2026-11-06 (sign up, save, load, another player's save refused, delete account).
 - [TODO] Google / Apple sign-in buttons (email + password only for now). Easy to add on Firebase if you want them.
-- [DONE] Leaderboards (see *Leaderboards* below; needs one Firestore rule).
+- [DECIDED - Tim, 2026-11-07] No leaderboards. They were built and then removed at Tim's request (not needed).
 
 **[DONE] Firebase setup** (Tim did this 2026-11-06; project `solo-miner-2daec`, keys in `js/cloud-config.js`). Steps kept here in case it ever needs redoing:
 1. Go to https://console.firebase.google.com, **Add project**, name it e.g. `solo-miner`. Google Analytics is optional (off is fine).
@@ -415,21 +405,10 @@ Players can make an account (email + password), sign in on any phone or computer
            && request.resource.data.data is string
            && request.resource.data.data.size() < 200000;
        }
-       match /leaderboard/{uid} {
-         allow read: if true;
-         allow delete: if request.auth != null && request.auth.uid == uid;
-         allow create, update: if request.auth != null && request.auth.uid == uid
-           && request.resource.data.keys().hasOnly(['name', 'allTime', 'best', 'rank', 'ach', 'shards', 'updatedAt'])
-           && request.resource.data.name is string
-           && request.resource.data.name.matches('^[A-Za-z0-9 _.-]{3,16}$')
-           && request.resource.data.allTime is int && request.resource.data.allTime >= 0 && request.resource.data.allTime < 1000000000000
-           && request.resource.data.best is int && request.resource.data.best >= 0 && request.resource.data.best < 1000000000000
-           && request.resource.data.rank is int && request.resource.data.ach is int && request.resource.data.shards is int;
-       }
      }
    }
    ```
-   (Each player can only read and write their own save, and a save can't be bigger than 200 KB. Anyone can read the leaderboard; each player can only write their own entry, with sane fields. The `leaderboard` block was added 2026-11-07 - see *Leaderboards*.)
+   (Each player can only read and write their own save, and a save can't be bigger than 200 KB.)
 5. **Project settings (gear) > General > Your apps > Web (`</>`)**, register an app (no hosting needed). From the config it shows, copy `apiKey` and `projectId` into `js/cloud-config.js` (or paste them to me in the project chat and I'll commit them). These are public by design, not secrets.
 6. Recommended: in Google Cloud Console > APIs & Services > Credentials, open the "Browser key" and restrict it to HTTP referrers `https://timleitch.github.io/*` and `http://localhost:*/*`.
 7. Free tier limits: 50,000 reads and 20,000 writes per day. One active player is roughly 2 writes a minute while playing, so this covers a few hundred daily players.
@@ -510,15 +489,14 @@ Players can make an account (email + password), sign in on any phone or computer
 3. **Offline gains balance** (see the two decisions above).
 4. **Sortie length** - is ~3 minutes the right feel?
 5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
-6. **Leaderboards:** please add the `leaderboard` Firestore rule (step 4 of *Firebase setup*) so the boards go live, and see the open questions in *Leaderboards*.
-7. **Cloud saves:** ~~Firebase setup~~ done. Still open: do you want Google sign-in as well as email + password? Recommended: restrict the API key to your site (step 6 of the Firebase setup).
-8. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
-9. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
-10. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
-11. **Ship weapons & systems:** are the prices and power right, should they unlock by rank or field, and should sentries be placed by hand? (See *Ship weapons & systems* above.)
-12. **Auto EVA:** keep it a free setting that is on by default, or make it a bought upgrade / off by default? (See *Auto EVA* above.)
-13. **Auto upgrade:** should it also buy new escort drones, weapons and modules, should it be on by default, and are the weights right? (See *Auto upgrade* above.)
-14. **Retention features (2026-11-07):** daily/weekly order rewards and streak, rebirth (keep rank?), achievement rewards, rare event chance/rewards, cosmetic prices, storage silo max: see the **[NEEDS DECISION]** lines in each section.
+6. **Cloud saves:** ~~Firebase setup~~ done. Still open: do you want Google sign-in as well as email + password? Recommended: restrict the API key to your site (step 6 of the Firebase setup).
+7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
+8. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
+9. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
+10. **Ship weapons & systems:** are the prices and power right, should they unlock by rank or field, and should sentries be placed by hand? (See *Ship weapons & systems* above.)
+11. **Auto EVA:** keep it a free setting that is on by default, or make it a bought upgrade / off by default? (See *Auto EVA* above.)
+12. **Auto upgrade:** should it also buy new escort drones, weapons and modules, should it be on by default, and are the weights right? (See *Auto upgrade* above.)
+13. **Retention features (2026-11-07):** daily/weekly order rewards and streak, rebirth (keep rank?), achievement rewards, rare event chance/rewards, cosmetic prices, storage silo max: see the **[NEEDS DECISION]** lines in each section.
 
 ## Game Design Document
 
