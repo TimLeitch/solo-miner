@@ -643,3 +643,28 @@ test('auto upgrade: never buys new drones, weapons or modules, but levels owned 
   assert.ok(st.auto.lv.racks > 1, 'module levelled');
   assert.equal(st.wing.count, 1);
 });
+
+test('sentries shoot down incoming asteroids and guard the miner on a spacewalk', () => {
+  const { w, advance } = gearGame(47, { sentry: 3 });
+  w.ship.x = 700; w.ship.y = 1000;
+  w.sentries.push({ x: 760, y: 1000, idle: 0, a: 0, shot: null, target: null, flakCd: 0 });
+  const rock = { x: 900, y: 1000, vx: -80, vy: 0, r: 12, rot: 0, vr: 0 }; // heading for the ship
+  w.debris = [rock];
+  const hull = w.hull;
+  advance(0.2);
+  assert.notEqual(w.debris[0], rock, 'the sentry shot the asteroid down');
+  assert.equal(w.sentryZaps, 1);
+  assert.equal(w.hull, hull);
+  // spacewalk: sentries come to the miner and shoot what is coming at it
+  w.debris = [];
+  w.eva = true;
+  w.miner = { x: 300, y: 600, vx: 0, vy: 0, a: 0, drilling: false, target: null, reel: false, inv: 0 };
+  w.sentryCd = 0;
+  advance(0.1);
+  assert.ok(w.sentries.some(q => Math.hypot(q.x - w.miner.x, q.y - w.miner.y) < 60), 'a sentry is beside the miner');
+  const rock2 = { x: w.miner.x + 150, y: w.miner.y, vx: -60, vy: 0, r: 12, rot: 0, vr: 0 };
+  w.debris = [rock2];
+  w.sentries.forEach(q => { q.flakCd = 0; });
+  advance(0.2);
+  assert.notEqual(w.debris[0], rock2, 'asteroid heading for the miner was shot down');
+});

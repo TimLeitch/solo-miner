@@ -156,14 +156,17 @@ SM.DATA = (function () {
   //              scavengers first, then the laser's target, then the nearest block. range = share of lock range
   //   sentry     L-1 turrets. While the laser fires, the ship drops one where it is (at most every `dropEvery` s, not on top of
   //              another) until all are out; after that, a sentry with nothing in reach for 1.5 s jumps to the ship instead.
-  //              Each one mines / shoots scavengers within `range` at dps x (1 + perLevel x (L-2)) x rank power
+  //              Each one mines / shoots scavengers within `range` at dps x (1 + perLevel x (L-2)) x rank power.
+  //              Guard duty (Tim, 2026-11-07): each sentry also shoots down a debris asteroid within `flakRange` every
+  //              flakCd x flakShrink^(L-2) s, the one closest to the miner / ship first. On a spacewalk they guard the miner:
+  //              they deploy beside it, and the farthest one hops over when the miner moves on.
   //   pd         zaps the nearest debris rock within `range` of the ship, every cd x shrink^(L-2) seconds
   //   deflector  absorbs one debris or mine hit, recharges in recharge x shrink^(L-2) seconds (works with drone shields)
   const SHIP_GEAR = {
     wide:      { max: 1 },
     split:     { max: 1 },
     minigun:   { dps: 3, perLevel: 0.5, range: 0.9, rate: 0.09 },
-    sentry:    { dps: 2.5, perLevel: 0.25, range: 130, dropEvery: 3 },
+    sentry:    { dps: 2.5, perLevel: 0.25, range: 130, dropEvery: 3, flakRange: 200, flakCd: 3, flakShrink: 0.9 },
     pd:        { range: 125, cd: 7, shrink: 0.85 },
     deflector: { recharge: 30, shrink: 0.85 },
   };

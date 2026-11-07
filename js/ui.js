@@ -282,7 +282,7 @@ SM.UI = (function () {
         wide: l => l < 2 ? 'Not fitted' : `Laser also burns the 4 blocks around its target at ${Math.round(Math.min(1, per('wide') * (l - 1)) * 100)}% power`,
         split: l => l < 2 ? 'Not fitted' : `Second beam on the next-nearest block at ${Math.round(Math.min(1, per('split') * (l - 1)) * 100)}% power (no extra heat)`,
         minigun: l => l < 2 ? 'Not fitted' : `${(G.minigun.dps * grow(l, G.minigun.perLevel)).toFixed(1)} dmg/s, never overheats, hits scavengers first`,
-        sentry: l => l < 2 ? 'Not fitted' : `${l - 1} sentr${l === 2 ? 'y' : 'ies'} at ${(G.sentry.dps * grow(l, G.sentry.perLevel)).toFixed(1)} dmg/s each, dropped where you mine`,
+        sentry: l => l < 2 ? 'Not fitted' : `${l - 1} sentr${l === 2 ? 'y' : 'ies'} at ${(G.sentry.dps * grow(l, G.sentry.perLevel)).toFixed(1)} dmg/s each, dropped where you mine. Each shoots down an asteroid every ${(G.sentry.flakCd * Math.pow(G.sentry.flakShrink, l - 2)).toFixed(1)}s and guards the miner on a spacewalk`,
         pd: l => l < 2 ? 'Not fitted' : `Zaps a nearby debris rock every ${(G.pd.cd * Math.pow(G.pd.shrink, l - 2)).toFixed(1)}s`,
         deflector: l => l < 2 ? 'Not fitted' : `Absorbs one debris or mine hit, recharges in ${Math.round(G.deflector.recharge * Math.pow(G.deflector.shrink, l - 2))}s`,
       };

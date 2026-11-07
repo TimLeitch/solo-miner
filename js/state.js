@@ -154,6 +154,7 @@ SM.State = (function () {
       gunDps: G.minigun.dps * grow('minigun', G.minigun.perLevel),
       sentries: L('sentry'),
       sentryDps: G.sentry.dps * grow('sentry', G.sentry.perLevel),
+      sentryFlakCd: L('sentry') > 0 ? G.sentry.flakCd * Math.pow(G.sentry.flakShrink, L('sentry') - 1) : 0,
       pdCd: L('pd') > 0 ? G.pd.cd * Math.pow(G.pd.shrink, L('pd') - 1) : 0,
       deflectCd: L('deflector') > 0 ? G.deflector.recharge * Math.pow(G.deflector.shrink, L('deflector') - 1) : 0,
     };

@@ -1702,22 +1702,42 @@ SM.Sortie = (function () {
     // sentry turrets: the ship drops one where it is mining; idle ones left behind jump back to the ship
     if (S.sentries > 0) {
       const R = G.sentry.range;
+      // who the sentries guard: the miner on a spacewalk, otherwise the ship
+      const guard = w.eva && w.miner ? w.miner : s;
       w.sentryCd -= dt;
-      if (w.firing && w.sentryCd <= 0 && !w.sentries.some(q => Math.hypot(q.x - s.x, q.y - s.y) < R * 0.6)) {
+      if ((w.firing || (w.eva && w.miner)) && w.sentryCd <= 0 && !w.sentries.some(q => Math.hypot(q.x - guard.x, q.y - guard.y) < R * 0.6)) {
         let q = null;
-        if (w.sentries.length < S.sentries) { q = { idle: 0, a: s.a, shot: null, target: null }; w.sentries.push(q); }
+        if (w.sentries.length < S.sentries) { q = { idle: 0, a: s.a, shot: null, target: null, flakCd: 0 }; w.sentries.push(q); }
         else {
-          q = w.sentries.find(o => o.idle > 1.5);
+          // on a spacewalk the sentry farthest from the miner comes along; otherwise an idle one jumps to the ship
+          q = guard !== s ? w.sentries.reduce((a, o) => Math.hypot(o.x - guard.x, o.y - guard.y) > Math.hypot(a.x - guard.x, a.y - guard.y) ? o : a)
+            : w.sentries.find(o => o.idle > 1.5);
           if (q) w.fx.push({ kind: 'ring', x: q.x, y: q.y, r: 16, t: 0, life: 0.4, color: '#57e39a' });
         }
         if (q) {
-          q.x = s.x; q.y = s.y; q.idle = 0; q.target = null; w.sentryCd = G.sentry.dropEvery;
-          w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: 20, t: 0, life: 0.4, color: '#57e39a' });
+          q.x = guard.x + (guard === s ? 0 : rand(-25, 25)); q.y = guard.y + (guard === s ? 0 : rand(-25, 25));
+          q.idle = 0; q.target = null; w.sentryCd = G.sentry.dropEvery;
+          w.fx.push({ kind: 'ring', x: q.x, y: q.y, r: 20, t: 0, life: 0.4, color: '#57e39a' });
           SM.Audio.click();
         }
       }
       for (const q of w.sentries) {
         if (!w) return;
+        // flak: shoot down an incoming asteroid, the one closest to the miner / ship first
+        q.flakCd = (q.flakCd || 0) - dt;
+        if (q.flakCd <= 0) {
+          let bi = -1, bd = Infinity;
+          w.debris.forEach((d, i) => {
+            if (Math.hypot(d.x - q.x, d.y - q.y) - d.r > G.sentry.flakRange) return;
+            const dd = Math.min(Math.hypot(d.x - guard.x, d.y - guard.y), Math.hypot(d.x - s.x, d.y - s.y));
+            if (dd < bd) { bd = dd; bi = i; }
+          });
+          if (bi >= 0) {
+            q.a = Math.atan2(w.debris[bi].y - q.y, w.debris[bi].x - q.x);
+            zapDebris(bi, q.x, q.y, '#57e39a');
+            q.flakCd = S.sentryFlakCd; w.sentryZaps = (w.sentryZaps || 0) + 1;
+          }
+        }
         let t = nearestFoe(q.x, q.y, R);
         if (!t) {
           if (!q.target || !q.target.alive || Math.hypot(q.target.x - q.x, q.target.y - q.y) > R) q.target = nearestNear(q.x, q.y, R);
