@@ -260,6 +260,31 @@ Tim: "a larger block ... you have to EVA and enter it ... hollow it out from the
 - **[NEEDS DECISION]** Should autopilot or the escort wing help more (e.g. autopilot parks at the hatch when you tap EVA near a giant)? Right now getting there and going in is manual on purpose.
 - **[TODO]** Sound: it reuses the existing chimes and booms; no dedicated "shell opens" sound yet.
 
+### Ship weapons & systems: wide beam, miniguns, sentries and more (added 2026-11-07 at Tim's request)
+
+Tim: "a widening of the laser, kind of like the miner has the widening ... some miniguns, some sentries, about 5 or 6 new upgrades to the ship that will make it even better and stronger."
+
+Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgrades > Shuttle. They are always on: no ammo and no button. Level 1 means "not fitted", so the first purchase fits the part. Like every upgrade, they have no level cap (the listed prices, then x1.5 per level).
+
+| Upgrade | Prices (fit, Lv 3, Lv 4, Lv 5) | What it does |
+| ------- | ------------------------------ | ------------ |
+| **Wide beam** | 250 / 600 / 1,300 / 2,800 | The ship's version of the Wide drill head. While the laser fires, it also burns the 4 blocks next to its target at 25% of laser power per level (max 100%). Glowing side beams show it. |
+| **Split beam** | 400 / 900 / 1,900 / 4,000 | A second pink beam locks the nearest *other* block in lock range at 25% of laser power per level (max 100%). Only the main beam makes heat. |
+| **Twin miniguns** | 350 / 800 / 1,700 / 3,600 | 3 dmg/s (+50% per level after the first), x rank power. They fire with FIRE, **never overheat** (they keep going while the laser vents), and shoot scavengers first, then the laser's target, then the nearest block. Range is 90% of lock range. Gun barrels show on the ship. |
+| **Sentry turrets** | 500 / 1,100 / 2,300 / 4,800 | One sentry per level bought. While you mine, the ship drops a sentry where it is (at most one every 3 s, not on top of another). Once all are out, a sentry with nothing in reach jumps to the ship instead. Each one mines or shoots scavengers within 130 units at 2.5 dmg/s (+25% per level after the first) x rank power. |
+| **Point defence** | 300 / 700 / 1,500 / 3,200 | Zaps the nearest debris rock within 125 units of the ship, every 7 s (x0.85 per level after the first). |
+| **Deflector shield** | 450 / 1,000 / 2,100 / 4,400 | Absorbs one debris or mine hit, then recharges in 30 s (x0.85 per level after the first). A faint purple bubble shows when it's charged. It goes before the drone shield projectors, so they stack. |
+
+- **[DONE]** All numbers are in `DATA.SHIP_GEAR` (plus the price rows in `DATA.SHUTTLE`, flagged `gear: true`) in `js/data.js`. Stats are in `SM.State.stats()` > `gearStats()`. The sortie code is `laserExtras()`, `updateShipGear()` and `drawShipGear()` in `js/sortie.js`. The deflector hooks into `shieldBlock()`.
+- **[DONE]** Giant rocks still work: the beams, guns and sentries can't hurt a closed giant shell or its core, just like the laser.
+- **[DONE]** **Threat:** the damage upgrades count toward Threat at half weight, the way the escort wing does. Side burn and sentries count half again, because not every target has 4 neighbours and sentries sit still. Point defence and the deflector don't count. Fully kitting a ship therefore makes fields a bit tougher and richer, as it does for the laser.
+- **[DONE]** Sentries are left behind when a cleared field warps you to the next one, and the ship drops new ones there.
+- **[DONE]** Tests: nothing works at level 1, the caps hold, and Threat rises. The wide beam hurts all 4 neighbours, the split beam cuts a second block, and the miniguns cut while the laser vents. Sentries deploy up to level-1 and break blocks by themselves. Point defence zaps debris, the deflector blocks one hit and then lets the next one through, and every field plays 25 s with all gear at Lv 5 (`node --test tests/*.test.js`, 25 tests pass). I also played it in Chromium at phone size with no game errors.
+- **[NEEDS DECISION]** **Prices and power:** the prices are mine, placed between the base shuttle upgrades and the escort wing. The miniguns at Lv 2 add about 40% of a base laser, which is strong early. Should these unlock by rank or field instead of being available from the start?
+- **[NEEDS DECISION]** **Sentry behaviour:** sentries drop by themselves wherever you mine. Would you rather have a button to place them by hand, or have them follow the ship like the escort wing?
+- **[TODO]** Dedicated sounds for the miniguns and sentries (they reuse the existing hit and click sounds for now).
+- **[TODO]** The hangar ship preview doesn't show the new parts yet; only the in-sortie ship has gun barrels.
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.
@@ -342,6 +367,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Region unlocks by lifetime credits + laser level, exactly as the table.
 - [DONE] Secondary weapons (see *Secondary weapons* above).
 - [DONE] Ship automation: auto-fire weapons, weapon selector, ammo autoloader, ammo racks, dock repair crew (see *Ship automation* above).
+- [DONE] Ship weapons & systems: wide beam, split beam, twin miniguns, sentry turrets, point defence, deflector shield (see *Ship weapons & systems* above).
 - [TODO] Cosmetic shop (only rank-unlocked paints exist).
 
 **Miner / character**
@@ -381,6 +407,7 @@ Players can make an account (email + password), sign in on any phone or computer
 7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
 8. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
 9. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
+10. **Ship weapons & systems:** are the prices and power right, should they unlock by rank or field, and should sentries be placed by hand? (See *Ship weapons & systems* above.)
 
 ## Game Design Document
 

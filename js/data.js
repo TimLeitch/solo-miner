@@ -139,7 +139,34 @@ SM.DATA = (function () {
     { id: 'targeting',name: 'Targeting array', stat: 'Lock range',    per: 0.15, costs: [150, 360, 850, 2000], unit: '%' },
     { id: 'scanner',  name: 'Payout scanner',  stat: 'Scan range',    per: 0.25, costs: [180, 450, 1050, 2500], unit: '%' },
     { id: 'heatsink', name: 'Heat sink',       stat: 'Heat capacity', per: 0.25, coolPer: 0.25, costs: [80, 200, 450, 1000], unit: '%' },
+    // Ship weapons & systems (added 2026-11-07 at Tim's request). Level 1 = not fitted; the first purchase fits it.
+    // Their numbers live in SHIP_GEAR below; `per` here is only used where noted.
+    { id: 'wide',      name: 'Wide beam',        stat: 'Side burn',    gear: true, per: 0.25, costs: [250, 600, 1300, 2800] },
+    { id: 'split',     name: 'Split beam',       stat: 'Second beam',  gear: true, per: 0.25, costs: [400, 900, 1900, 4000] },
+    { id: 'minigun',   name: 'Twin miniguns',    stat: 'Gun damage',   gear: true, costs: [350, 800, 1700, 3600] },
+    { id: 'sentry',    name: 'Sentry turrets',   stat: 'Sentries',     gear: true, costs: [500, 1100, 2300, 4800] },
+    { id: 'pd',        name: 'Point defence',    stat: 'Debris zapper', gear: true, costs: [300, 700, 1500, 3200] },
+    { id: 'deflector', name: 'Deflector shield', stat: 'Hit absorber', gear: true, costs: [450, 1000, 2100, 4400] },
   ];
+
+  // Tuning for the ship weapons & systems above (L = upgrade level; L 1 = not fitted, so effects start at L 2).
+  //   wide       the laser also burns the 4 blocks next to its target at per x (L-1) of its power (max 100%), like the Wide drill head
+  //   split      a second beam locks the nearest other block in lock range at per x (L-1) of laser power (max 100%); only the main beam makes heat
+  //   minigun    dps x (1 + perLevel x (L-2)) x rank power, before resistance. Fires with the laser (FIRE), never overheats, shoots
+  //              scavengers first, then the laser's target, then the nearest block. range = share of lock range
+  //   sentry     L-1 turrets. While the laser fires, the ship drops one where it is (at most every `dropEvery` s, not on top of
+  //              another) until all are out; after that, a sentry with nothing in reach for 1.5 s jumps to the ship instead.
+  //              Each one mines / shoots scavengers within `range` at dps x (1 + perLevel x (L-2)) x rank power
+  //   pd         zaps the nearest debris rock within `range` of the ship, every cd x shrink^(L-2) seconds
+  //   deflector  absorbs one debris or mine hit, recharges in recharge x shrink^(L-2) seconds (works with drone shields)
+  const SHIP_GEAR = {
+    wide:      { max: 1 },
+    split:     { max: 1 },
+    minigun:   { dps: 3, perLevel: 0.5, range: 0.9, rate: 0.09 },
+    sentry:    { dps: 2.5, perLevel: 0.25, range: 130, dropEvery: 3 },
+    pd:        { range: 125, cd: 7, shrink: 0.85 },
+    deflector: { recharge: 30, shrink: 0.85 },
+  };
 
   // Miner upgrades. Costs are NOT in the README - placeholder values (see README "Needs decision").
   const MINER = [
@@ -320,5 +347,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, features, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR, GIANT, giantCount };
+  return { MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR, GIANT, giantCount };
 })();

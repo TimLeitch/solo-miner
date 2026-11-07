@@ -229,7 +229,7 @@ SM.UI = (function () {
     let html = '';
     const S = St.stats();
     if (seg === 'shuttle') {
-      D.SHUTTLE.forEach(u => {
+      D.SHUTTLE.filter(u => !u.gear).forEach(u => {
         const l = St.lvl(u.id), cur = u.per * (l - 1), nxt = u.per * l;
         const maxed = St.upgradeCost(u.id) == null;
         let extra = '';
@@ -240,6 +240,23 @@ SM.UI = (function () {
           eff = `Heat capacity ${pct(cur)}${maxed ? '' : ` &rarr; <b>${pct(nxt)}</b>`}, cooling speed ${pct(u.coolPer * (l - 1))}${maxed ? '' : ` &rarr; <b>${pct(u.coolPer * l)}</b>`}<br>Now: fires ${fire.toFixed(1)}s, then cools ${coolT.toFixed(1)}s`;
         }
         html += upgradeRow(u, u.id, eff);
+      });
+      // ship weapons & systems (DATA.SHIP_GEAR): level 1 = not fitted
+      html += `<h3>Ship weapons &amp; systems</h3><div class="card small muted">Fitted to the shuttle and always on: no ammo, no button. Guns and beams fire with <b>FIRE</b>; sentries, point defence and the deflector work by themselves. The first purchase fits the part.</div>`;
+      const G = D.SHIP_GEAR, rp = 1 + D.RANK_POWER * (St.rank() - 1);
+      const per = id => D.SHUTTLE.find(u => u.id === id).per;
+      const grow = (l, k) => (1 + k * (l - 2)) * rp;
+      const gearEff = {
+        wide: l => l < 2 ? 'Not fitted' : `Laser also burns the 4 blocks around its target at ${Math.round(Math.min(1, per('wide') * (l - 1)) * 100)}% power`,
+        split: l => l < 2 ? 'Not fitted' : `Second beam on the next-nearest block at ${Math.round(Math.min(1, per('split') * (l - 1)) * 100)}% power (no extra heat)`,
+        minigun: l => l < 2 ? 'Not fitted' : `${(G.minigun.dps * grow(l, G.minigun.perLevel)).toFixed(1)} dmg/s, never overheats, hits scavengers first`,
+        sentry: l => l < 2 ? 'Not fitted' : `${l - 1} sentr${l === 2 ? 'y' : 'ies'} at ${(G.sentry.dps * grow(l, G.sentry.perLevel)).toFixed(1)} dmg/s each, dropped where you mine`,
+        pd: l => l < 2 ? 'Not fitted' : `Zaps a nearby debris rock every ${(G.pd.cd * Math.pow(G.pd.shrink, l - 2)).toFixed(1)}s`,
+        deflector: l => l < 2 ? 'Not fitted' : `Absorbs one debris or mine hit, recharges in ${Math.round(G.deflector.recharge * Math.pow(G.deflector.shrink, l - 2))}s`,
+      };
+      D.SHUTTLE.filter(u => u.gear).forEach(u => {
+        const l = St.lvl(u.id);
+        html += upgradeRow(u, u.id, gearEff[u.id](l) + (St.upgradeCost(u.id) == null ? '' : ` &rarr; <b>${gearEff[u.id](l + 1)}</b>`));
       });
     } else if (seg === 'miner') {
       const u0 = D.MINER[0], u1 = D.MINER[1], u2 = D.MINER[2];

@@ -140,6 +140,22 @@ SM.State = (function () {
       evaO2: D.EVA.o2 * (1 + 0.25 * (lvl('o2') - 1)),
       drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)) * rankPower,
       drillSplash: Math.min(1, D.MINER.find(u => u.id === 'bit').per * (lvl('bit') - 1)), // wide drill head: side cut share
+      ...gearStats(rankPower),
+    };
+  }
+  // Ship weapons & systems (DATA.SHIP_GEAR). Level 1 = not fitted: every value is 0 until the first purchase.
+  function gearStats(rankPower) {
+    const G = D.SHIP_GEAR, per = id => D.SHUTTLE.find(u => u.id === id).per;
+    const L = id => lvl(id) - 1; // levels bought
+    const grow = (id, k) => L(id) > 0 ? (1 + k * (L(id) - 1)) * rankPower : 0;
+    return {
+      wideBeam: Math.min(G.wide.max, per('wide') * L('wide')),
+      splitBeam: Math.min(G.split.max, per('split') * L('split')),
+      gunDps: G.minigun.dps * grow('minigun', G.minigun.perLevel),
+      sentries: L('sentry'),
+      sentryDps: G.sentry.dps * grow('sentry', G.sentry.perLevel),
+      pdCd: L('pd') > 0 ? G.pd.cd * Math.pow(G.pd.shrink, L('pd') - 1) : 0,
+      deflectCd: L('deflector') > 0 ? G.deflector.recharge * Math.pow(G.deflector.shrink, L('deflector') - 1) : 0,
     };
   }
   function maxHull() { return stats().hull; }
@@ -215,7 +231,10 @@ SM.State = (function () {
     const laser = S.dps / D.BASE.dps;
     const wing = (s.wing.drones || []).reduce((a, d) => a + droneStats(d).dps, 0) / D.BASE.dps * 0.5;
     const weap = Object.values(s.weapons.owned).reduce((a, l) => a + (l || 0), 0) * 0.1;
-    const power = laser + wing + weap;
+    // ship weapons (DATA.SHIP_GEAR) count as extra laser power at half weight, like the wing. Within that, side burn and
+    // sentries count half again (not every target has 4 neighbours; sentries sit still). Point defence and deflector don't count.
+    const gear = (laser * (S.wideBeam * 0.5 + S.splitBeam) + (S.gunDps + S.sentries * S.sentryDps * 0.5) / D.BASE.dps) * 0.5;
+    const power = laser + wing + weap + gear;
     const t = Math.max(1, power);
     return { power, level: t, hp: Math.pow(t, D.THREAT.hp), value: Math.pow(t, D.THREAT.value), hazard: Math.pow(t, D.THREAT.hazard) };
   }

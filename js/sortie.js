@@ -288,6 +288,9 @@ SM.Sortie = (function () {
       autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
       left: world.left, startRegion: region, giantsCracked: 0, giantCr: 0, cleared: 0, surveyed: {}, fieldCr: 0, clearBonus: 0,
       booms: [], flare: region.flares ? region.flares.every * 0.6 : 0, flareOn: 0, windA: rand(0, Math.PI * 2), foeKills: 0,
+      // ship weapons & systems (DATA.SHIP_GEAR)
+      splitTarget: null, gunTarget: null, gunTick: 0, gunSide: 1, sentries: [], sentryCd: 1, pdCd: 0, deflect: 0,
+      wantFire: false, pdZaps: 0, deflected: 0,
     });
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
@@ -510,13 +513,15 @@ SM.Sortie = (function () {
       if (w.tut >= 0 && w.tut <= 1) tutorialStep(2);
     }
   }
-  function nearestBlock(maxD) {
-    const s = w.ship; let best = null, bd = maxD;
-    const r = Math.ceil(maxD / BS), gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
+  function nearestBlock(maxD) { return nearestNear(w.ship.x, w.ship.y, maxD); }
+  // nearest block the ship's guns may hurt within maxD of (x, y), skipping `skip` (grid search, cheap)
+  function nearestNear(x, y, maxD, skip) {
+    let best = null, bd = maxD;
+    const r = Math.ceil(maxD / BS), gx = Math.floor(x / BS), gy = Math.floor(y / BS);
     for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
-      if (!b || !b.alive || !shipCan(b)) continue;
-      const d = Math.hypot(b.x - s.x, b.y - s.y);
+      if (!b || !b.alive || b === skip || !shipCan(b)) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
       if (d < bd) { bd = d; best = b; }
     }
     return best;
@@ -665,7 +670,7 @@ SM.Sortie = (function () {
 
     // targeting
     if (w.target && !w.target.alive) w.target = null;
-    const wantFire = !w.eva && (input.mine || settings().autoFire);
+    const wantFire = w.wantFire = !w.eva && (input.mine || settings().autoFire);
     // scavengers in range jump the queue: every second they live they are eating your field
     if (wantFire && settings().aimAssist && w.foes.length && !(w.target && w.target.foe)) {
       const f = nearestFoe(s.x, s.y, S.range); if (f) w.target = f;
@@ -698,13 +703,17 @@ SM.Sortie = (function () {
       b.state = frac > 0.66 ? 0 : frac > 0.33 ? 1 : 2;
       if (b.state > prevState) SM.Audio.crack();
       if (b.hp <= 0) { if (b.foe) killFoe(b); else breakBlock(b); }
+      laserExtras(b, dt);
     } else {
+      w.splitTarget = null;
       w.heat = Math.max(0, w.heat - S.cool * dt * (w.flareOn > 0 ? 0.5 : 1));
       if (w.overheated && w.heat <= S.heat * D.BASE.resumeAt) { w.overheated = false; caption('Laser cooled - mining again', 'good'); }
     }
     if (!w) return; // the sortie may have ended inside updateEva
     SM.Audio.laser(w.firing || !!(w.miner && w.miner.drilling) || w.wing.some(d => d.firing));
     updateWeapons(dt);
+    updateShipGear(dt);
+    if (!w) return;
     updateAuto(dt);
     updateWing(dt);
 
@@ -921,7 +930,8 @@ SM.Sortie = (function () {
       stars: world.stars, relics: world.relics, left: world.left, giants: world.giants,
       wells: world.wells, mines: world.mines, foes: world.foes, regrow: world.regrow, booms: [],
       flare: next.flares ? next.flares.every * 0.6 : 0, flareOn: 0,
-      target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0 });
+      target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0,
+      sentries: [], sentryCd: 1, splitTarget: null, gunTarget: null }); // sentries are left behind; the ship drops new ones
     const s = w.ship;
     s.x = w.dock.x; s.y = w.dock.y - 30; s.vx = 0; s.vy = 0; s.a = -Math.PI / 2; s.inv = 1.5;
     w.cam.x = w.dock.x; w.cam.y = w.dock.y - 200;
@@ -1123,6 +1133,12 @@ SM.Sortie = (function () {
   }
   // Shield projectors: returns true if a shield absorbed the hit.
   function shieldBlock() {
+    if (w.S.deflectCd > 0 && w.deflect <= 0) { // the ship's own deflector goes first
+      w.deflect = w.S.deflectCd; w.deflected++;
+      w.fx.push({ kind: 'ring', x: w.ship.x, y: w.ship.y, r: 30, t: 0, life: 0.5, color: '#b48cff' });
+      SM.Audio.zap(); caption('Deflector absorbed the hit', 'good');
+      return true;
+    }
     const d = w.wing.find(o => o.gear === 'shield' && o.gcd <= 0);
     if (!d) return false;
     d.gcd = D.WING.gear.find(x => x.id === 'shield').cd;
@@ -1451,6 +1467,138 @@ SM.Sortie = (function () {
     if (best !== w.weapon) caption(St.weaponDef(best).name + ' selected');
     w.weapon = best;
     if (fireWeapon()) { w.autoShots++; w.autoCd = St.fcsDelay(); }
+  }
+
+  // ---------- ship weapons & systems (DATA.SHIP_GEAR, levels in Upgrades > Shuttle) ----------
+  // Wide beam and split beam: run every frame the main laser is firing at block b.
+  function laserExtras(b, dt) {
+    if (!w) return;
+    const s = w.ship, S = w.S;
+    if (S.wideBeam > 0 && !b.foe) { // like the Wide drill head: burn the 4 blocks around the target
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        if (!w) return;
+        const nb = w.grid.get(key(b.gx + dx, b.gy + dy));
+        if (nb && nb.alive && shipCan(nb)) hurtBlock(nb, S.dps * S.wideBeam * dt, true);
+      }
+    }
+    if (!w) return;
+    if (S.splitBeam > 0) { // a second beam on the nearest other block in lock range (no extra heat)
+      let t = w.splitTarget;
+      if (!t || !t.alive || t === b || Math.hypot(t.x - s.x, t.y - s.y) > S.range) t = w.splitTarget = nearestNear(s.x, s.y, S.range, b);
+      if (t) hurtBlock(t, S.dps * S.splitBeam * dt, true);
+    }
+  }
+  function zapDebris(i, x, y, color) {
+    const o = w.debris[i];
+    w.fx.push({ kind: 'beam', x1: x, y1: y, x2: o.x, y2: o.y, t: 0, life: 0.2, color });
+    for (let k = 0; k < 12; k++) w.particles.push({ x: o.x, y: o.y, vx: rand(-140, 140), vy: rand(-140, 140), t: 0, life: 0.5, color: k % 2 ? '#ff6b6b' : '#ffd76a', size: 3 });
+    SM.Audio.hit(); SM.Audio.crack();
+    w.debris[i] = newDebris(w.region, w.ship);
+  }
+  function updateShipGear(dt) {
+    const s = w.ship, S = w.S, G = D.SHIP_GEAR;
+    // deflector recharge
+    if (S.deflectCd > 0 && w.deflect > 0) {
+      w.deflect -= dt;
+      if (w.deflect <= 0) w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: 24, t: 0, life: 0.4, color: '#b48cff' });
+    }
+    // point defence: zap the nearest debris rock that comes close
+    if (S.pdCd > 0) {
+      w.pdCd -= dt;
+      if (w.pdCd <= 0) {
+        let bi = -1, bd = G.pd.range;
+        w.debris.forEach((d, i) => { const dd = Math.hypot(d.x - s.x, d.y - s.y) - d.r; if (dd < bd) { bd = dd; bi = i; } });
+        if (bi >= 0) { zapDebris(bi, s.x, s.y, '#b48cff'); w.pdCd = S.pdCd; w.pdZaps++; }
+      }
+    }
+    // twin miniguns: fire with the laser, never overheat. Scavengers first, then the laser's target, then the nearest block.
+    w.gunTarget = null;
+    if (S.gunDps > 0 && w.wantFire && !w.eva) {
+      const range = S.range * G.minigun.range;
+      let t = nearestFoe(s.x, s.y, range);
+      if (!t && w.target && w.target.alive && shipCan(w.target) && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= range) t = w.target;
+      if (!t) t = nearestBlock(range);
+      if (t) {
+        w.gunTarget = t;
+        w.gunTick -= dt;
+        if (w.gunTick <= 0) {
+          w.gunTick = G.minigun.rate; w.gunSide = -w.gunSide;
+          const ga = s.a + w.gunSide * Math.PI / 2;
+          w.fx.push({ kind: 'tracer', x1: s.x + Math.cos(ga) * 8, y1: s.y + Math.sin(ga) * 8, x2: t.x + rand(-6, 6), y2: t.y + rand(-6, 6), t: 0, life: 0.07, color: '#ffd76a' });
+          if (!settings().reducedFx && Math.random() < 0.35) w.particles.push({ x: t.x + rand(-6, 6), y: t.y + rand(-6, 6), vx: rand(-80, 80), vy: rand(-80, 80), t: 0, life: 0.2, color: '#ffe9a8', size: 2 });
+        }
+        hurtBlock(t, S.gunDps * dt, true);
+        if (!w) return;
+      }
+    }
+    // sentry turrets: the ship drops one where it is mining; idle ones left behind jump back to the ship
+    if (S.sentries > 0) {
+      const R = G.sentry.range;
+      w.sentryCd -= dt;
+      if (w.firing && w.sentryCd <= 0 && !w.sentries.some(q => Math.hypot(q.x - s.x, q.y - s.y) < R * 0.6)) {
+        let q = null;
+        if (w.sentries.length < S.sentries) { q = { idle: 0, a: s.a, shot: null, target: null }; w.sentries.push(q); }
+        else {
+          q = w.sentries.find(o => o.idle > 1.5);
+          if (q) w.fx.push({ kind: 'ring', x: q.x, y: q.y, r: 16, t: 0, life: 0.4, color: '#57e39a' });
+        }
+        if (q) {
+          q.x = s.x; q.y = s.y; q.idle = 0; q.target = null; w.sentryCd = G.sentry.dropEvery;
+          w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: 20, t: 0, life: 0.4, color: '#57e39a' });
+          SM.Audio.click();
+        }
+      }
+      for (const q of w.sentries) {
+        if (!w) return;
+        let t = nearestFoe(q.x, q.y, R);
+        if (!t) {
+          if (!q.target || !q.target.alive || Math.hypot(q.target.x - q.x, q.target.y - q.y) > R) q.target = nearestNear(q.x, q.y, R);
+          t = q.target;
+        }
+        q.shot = t;
+        if (!t) { q.idle += dt; continue; }
+        q.idle = 0; q.a = Math.atan2(t.y - q.y, t.x - q.x);
+        hurtBlock(t, S.sentryDps * dt, true);
+      }
+    }
+  }
+  function drawShipGear() {
+    const s = w.ship, S = w.S;
+    // split beam
+    if (w.firing && w.splitTarget && w.splitTarget.alive) {
+      const t = w.splitTarget, ex = s.x + Math.cos(s.a) * 10, ey = s.y + Math.sin(s.a) * 10;
+      g.strokeStyle = 'rgba(255,107,214,0.35)'; g.lineWidth = 5;
+      g.beginPath(); g.moveTo(ex, ey); g.lineTo(t.x, t.y); g.stroke();
+      g.strokeStyle = '#ffd1f2'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(ex, ey); g.lineTo(t.x + rand(-2, 2), t.y + rand(-2, 2)); g.stroke();
+    }
+    // wide beam glow on the neighbours
+    if (w.firing && S.wideBeam > 0 && w.target && !w.target.foe) {
+      const b = w.target;
+      g.strokeStyle = `rgba(120,230,255,${0.15 + 0.3 * S.wideBeam})`; g.lineWidth = 4;
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+        const nb = w.grid.get(key(b.gx + dx, b.gy + dy));
+        if (!nb || !nb.alive || !shipCan(nb)) return;
+        g.beginPath(); g.moveTo(b.x, b.y); g.lineTo(nb.x, nb.y); g.stroke();
+      });
+    }
+    // sentries
+    w.sentries.forEach(q => {
+      if (q.shot) {
+        g.strokeStyle = 'rgba(87,227,154,0.6)'; g.lineWidth = 2;
+        g.beginPath(); g.moveTo(q.x, q.y); g.lineTo(q.shot.x + rand(-2, 2), q.shot.y + rand(-2, 2)); g.stroke();
+      }
+      g.save(); g.translate(q.x, q.y);
+      g.fillStyle = '#2a3b33'; g.strokeStyle = '#57e39a'; g.lineWidth = 1.5;
+      g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.lineTo(Math.cos(a) * 8, Math.sin(a) * 8); } g.closePath(); g.fill(); g.stroke();
+      g.rotate(q.a); g.fillStyle = '#57e39a'; g.fillRect(0, -1.5, 10, 3);
+      g.restore();
+    });
+    // deflector bubble when charged
+    if (S.deflectCd > 0 && w.deflect <= 0 && !w.eva) {
+      g.strokeStyle = 'rgba(180,140,255,0.45)'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(s.x, s.y, 20, 0, Math.PI * 2); g.stroke();
+    }
   }
 
   // weapon damage goes through block resistance just like the laser
@@ -1804,6 +1952,9 @@ SM.Sortie = (function () {
       if (f.kind === 'ring') {
         g.strokeStyle = f.color; g.lineWidth = 4 * (1 - k) + 1;
         g.beginPath(); g.arc(f.x, f.y, f.r * (0.4 + 0.6 * k), 0, Math.PI * 2); g.stroke();
+      } else if (f.kind === 'tracer') {
+        g.strokeStyle = f.color; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(f.x1 + (f.x2 - f.x1) * k * 0.5, f.y1 + (f.y2 - f.y1) * k * 0.5); g.lineTo(f.x2, f.y2); g.stroke();
       } else if (f.kind === 'beam') {
         g.strokeStyle = f.color; g.lineWidth = 10 * (1 - k) + 2;
         g.beginPath(); g.moveTo(f.x1, f.y1); g.lineTo(f.x2, f.y2); g.stroke();
@@ -1828,6 +1979,7 @@ SM.Sortie = (function () {
       g.fillStyle = fg; g.fillRect(vx0 - BS, vy0 - BS, vx1 - vx0 + BS * 2, vy1 - vy0 + BS * 2);
     }
 
+    drawShipGear();
     drawWingAndEva();
     drawShip(s);
 
@@ -1903,6 +2055,7 @@ SM.Sortie = (function () {
     g.fillStyle = '#4fb8ff'; g.beginPath(); g.ellipse(3, 0, 4.5, 3, 0, 0, Math.PI * 2); g.fill();
     const lv = SM.State.lvl('laser');
     g.fillStyle = lv >= 3 ? '#ff6bd6' : '#7fe3ff'; g.fillRect(11, -1.5, 4 + lv, 3); // laser emitter grows with level
+    if (SM.State.lvl('minigun') >= 2) { g.fillStyle = '#9aa6b8'; g.fillRect(-2, -10, 11, 2.5); g.fillRect(-2, 7.5, 11, 2.5); } // twin miniguns
     if (SM.State.lvl('hull') >= 3) { g.strokeStyle = '#8a96ad'; g.lineWidth = 2; g.beginPath(); g.moveTo(-6, -9); g.lineTo(4, -5); g.moveTo(-6, 9); g.lineTo(4, 5); g.stroke(); }
     g.restore();
   }

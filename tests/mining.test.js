@@ -393,3 +393,131 @@ test('wide drill head cuts neighbouring cells', () => {
   st.levels.bit = 30;
   assert.equal(SM.State.stats().drillSplash, 1, 'capped at 100%');
 });
+
+// ---------- ship weapons & systems (DATA.SHIP_GEAR) ----------
+function gearGame(seed, levels) {
+  const g = game(seed);
+  const st = g.SM.State.get();
+  st.tutorial = false; st.settings.autoFire = false; st.settings.autopilot = false;
+  Object.assign(st.levels, levels);
+  g.SM.Sortie.start('nearside');
+  const w = g.SM.Sortie._debug();
+  w.debris = [];
+  return Object.assign(g, { st, w });
+}
+// a normal block with all 4 neighbours standing, and the ship parked in range of it
+function aimAtCluster(w) {
+  const at = (x, y) => w.grid.get(x * 100000 + y);
+  const b = w.blocks.find(c => c.alive && !c.giant && [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([dx, dy]) => { const n = at(c.gx + dx, c.gy + dy); return n && n.alive && !n.giant; }));
+  const nbs = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => at(b.gx + dx, b.gy + dy));
+  nbs.concat(b).forEach(c => { c.hp = c.maxHp = 1e6; });
+  w.target = b; w.ship.x = b.x; w.ship.y = b.y; // collision pushes the ship out next to it
+  return { b, nbs };
+}
+
+test('ship gear: nothing is fitted at level 1, and fitted gear raises Threat', () => {
+  const { SM } = game(31);
+  const st = SM.State.get();
+  const S = SM.State.stats(), t0 = SM.State.threat().power;
+  ['wideBeam', 'splitBeam', 'gunDps', 'sentries', 'sentryDps', 'pdCd', 'deflectCd'].forEach(k => assert.equal(S[k], 0, k));
+  Object.assign(st.levels, { wide: 3, split: 3, minigun: 3, sentry: 3, pd: 3, deflector: 3 });
+  const S2 = SM.State.stats();
+  assert.equal(S2.wideBeam, 0.5); assert.equal(S2.splitBeam, 0.5); assert.equal(S2.sentries, 2);
+  assert.ok(S2.gunDps > SM.DATA.SHIP_GEAR.minigun.dps && S2.pdCd < SM.DATA.SHIP_GEAR.pd.cd && S2.deflectCd < SM.DATA.SHIP_GEAR.deflector.recharge);
+  assert.ok(SM.State.threat().power > t0, 'weapons count toward Threat');
+  st.levels.wide = 40; st.levels.split = 40;
+  assert.equal(SM.State.stats().wideBeam, 1, 'wide beam capped at 100%');
+  assert.equal(SM.State.stats().splitBeam, 1, 'split beam capped at 100%');
+  assert.ok(SM.DATA.SHUTTLE.filter(u => u.gear).length === 6);
+});
+
+test('wide beam burns the 4 blocks around the laser target; without it they are untouched', () => {
+  for (const lvl of [1, 3]) {
+    const { st, w, advance } = gearGame(33, { wide: lvl });
+    const { b, nbs } = aimAtCluster(w);
+    st.settings.autoFire = true;
+    advance(1);
+    assert.ok(b.hp < b.maxHp, 'main target is being cut');
+    const cut = nbs.filter(n => n.hp < n.maxHp).length;
+    if (lvl === 1) assert.equal(cut, 0, 'no side burn without the upgrade');
+    else assert.equal(cut, 4, 'all 4 neighbours burn');
+  }
+});
+
+test('split beam cuts a second block at the same time', () => {
+  const { st, w, advance } = gearGame(35, { split: 5 });
+  const { b } = aimAtCluster(w);
+  st.settings.autoFire = true;
+  advance(0.5);
+  const t = w.splitTarget;
+  assert.ok(t && t !== b, 'second beam picked another block');
+  assert.ok(t.hp < t.maxHp || !t.alive, 'and hurt it');
+});
+
+test('miniguns keep shooting while the laser vents, and shoot scavengers', () => {
+  const { st, w, advance } = gearGame(37, { minigun: 3 });
+  const { b } = aimAtCluster(w);
+  w.overheated = true; w.heat = 1e9; st.settings.autoFire = true;
+  advance(1);
+  assert.equal(w.firing, false, 'laser is venting');
+  assert.ok(b.hp < b.maxHp, 'guns still cut the target');
+  assert.ok(w.fx.some(f => f.kind === 'tracer') || w.gunTarget, 'tracers fly');
+});
+
+test('sentries are dropped where the ship mines, up to level - 1, and mine on their own', () => {
+  const { st, w, advance } = gearGame(39, { sentry: 4, laser: 6 });
+  st.settings.autoFire = true; st.settings.autopilot = true;
+  advance(40);
+  assert.equal(w.sentries.length, 3, `${w.sentries.length} sentries out`);
+  const g0 = gearGame(39, { sentry: 1 });
+  g0.st.settings.autoFire = true; g0.st.settings.autopilot = true;
+  g0.advance(10);
+  assert.equal(g0.w.sentries.length, 0, 'none without the upgrade');
+  // a sentry on its own breaks blocks
+  const g2 = gearGame(41, { sentry: 2 });
+  const { b } = aimAtCluster(g2.w);
+  b.hp = b.maxHp = 5;
+  g2.w.sentries.push({ x: b.x, y: b.y + 10, idle: 0, a: 0, shot: null, target: null }); // b is the nearest block to it
+  g2.w.ship.x = 100; g2.w.ship.y = 100;
+  g2.advance(5);
+  assert.equal(b.alive, false, 'sentry broke the block by itself');
+});
+
+test('point defence zaps debris that comes close', () => {
+  const { w, advance } = gearGame(43, { pd: 2 });
+  w.ship.x = 700; w.ship.y = 1000; w.ship.vx = 0; w.ship.vy = 0;
+  const rock = { x: 760, y: 1000, vx: 0, vy: 0, r: 12, rot: 0, vr: 0 };
+  w.debris = [rock];
+  advance(0.2);
+  assert.notEqual(w.debris[0], rock, 'the rock was destroyed and replaced far away');
+  assert.equal(w.pdZaps, 1);
+});
+
+test('deflector absorbs a hit, then recharges', () => {
+  const { w, advance } = gearGame(45, { deflector: 2 });
+  w.ship.x = 700; w.ship.y = 1000;
+  const hull = w.hull;
+  w.debris = [{ x: 700, y: 1000, vx: 0, vy: 0, r: 12, rot: 0, vr: 0 }];
+  advance(0.1);
+  assert.equal(w.hull, hull, 'no damage');
+  assert.equal(w.deflected, 1);
+  assert.ok(w.deflect > 0, 'recharging');
+  w.debris = [{ x: w.ship.x, y: w.ship.y, vx: 0, vy: 0, r: 12, rot: 0, vr: 0 }]; w.ship.inv = 0;
+  advance(0.1);
+  assert.ok(w.hull < hull, 'a second hit right away gets through');
+});
+
+test('every field plays with all ship gear fitted without errors', () => {
+  const ids = SM_IDS();
+  for (const id of ids) {
+    const g = game(200 + ids.indexOf(id));
+    const st = g.SM.State.get();
+    st.tutorial = false; st.levels.laser = 8; st.levels.hull = 12;
+    Object.assign(st.levels, { wide: 5, split: 5, minigun: 5, sentry: 5, pd: 5, deflector: 5 });
+    g.SM.Sortie.start(id);
+    const w = g.SM.Sortie._debug();
+    g.advance(25);
+    assert.ok(w.broken > 0, `${id}: mined ${w.broken}`);
+  }
+});
+function SM_IDS() { return game(1).SM.DATA.REGIONS.map(r => r.id); }
