@@ -38,6 +38,7 @@ function game(seed) {
   for (const file of ['data', 'state', 'sortie']) vm.runInContext(fs.readFileSync(`js/${file}.js`, 'utf8'), sandbox);
   sandbox.SM.Audio = new Proxy({}, { get: () => () => {} });
   sandbox.SM.State.load();
+  sandbox.SM.State.get().settings.autoEva = false; // off by default here so other tests see the ship alone; auto EVA has its own tests
   sandbox.SM.Sortie.init();
   return {
     SM: sandbox.SM,
@@ -521,3 +522,73 @@ test('every field plays with all ship gear fitted without errors', () => {
   }
 });
 function SM_IDS() { return game(1).SM.DATA.REGIONS.map(r => r.id); }
+
+test('auto EVA: autopilot parks at a giant hatch, the miner goes in by itself, hollows it over several tanks', () => {
+  const { SM, advance } = game(17);
+  const st = SM.State.get(); st.tutorial = false;
+  Object.assign(st.settings, { autoFire: true, autopilot: true, autoEva: true });
+  // base drill: the core takes ~43 s, longer than one 30 s tank
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = []; w.fields = []; w.relics = []; w.time = 1e4; w.fuel = 1e9;
+  const G = w.giants[0], BS = 34;
+  w.ship.x = G.hx + G.nx * BS * 5; w.ship.y = G.hy + G.ny * BS * 5;
+  let evas = 0, was = false, inside = false;
+  for (let i = 0; i < 4000 && !G.open; i++) {
+    advance(0.05); w.hull = 100;
+    if (w.eva && !was) evas++;
+    was = w.eva;
+    if (w.miner && Math.abs(w.miner.x - G.x) < G.size * BS / 2 && Math.abs(w.miner.y - G.y) < G.size * BS / 2) inside = true;
+  }
+  assert.ok(inside, 'the miner walked in through the hatch');
+  assert.ok(G.open, `giant hollowed (${G.coreLeft}/${G.core} core left after ${evas} trips)`);
+  assert.ok(evas >= 2, `went out more than once on oxygen refills (${evas})`);
+  // then it boards, and the ship breaks the shell on autopilot
+  for (let i = 0; i < 3000 && !G.cracked; i++) { advance(0.05); w.hull = 100; }
+  assert.ok(G.cracked, 'ship cracked the opened giant');
+});
+
+test('auto EVA: fetches a relic in tether reach and comes back aboard', () => {
+  const { SM, advance } = game(23);
+  const st = SM.State.get(); st.tutorial = false;
+  Object.assign(st.settings, { autoFire: false, autopilot: false, autoEva: true });
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = []; w.fields = []; w.giants = []; w.mines = []; w.foes = [];
+  const r = w.relics[0];
+  // put the ship in open space 150 units from the relic
+  w.blocks.forEach(b => { if (Math.hypot(b.x - r.x, b.y - r.y) < 220) { b.alive = false; w.grid.delete(b.gx * 100000 + b.gy); } });
+  w.relics = [r]; w.ship.x = r.x + 150; w.ship.y = r.y;
+  advance(1);
+  assert.ok(w.eva && w.miner && w.miner.auto, 'miner went out by itself');
+  for (let i = 0; i < 400 && (r.alive || w.eva); i++) advance(0.05);
+  assert.equal(r.alive, false, 'relic collected');
+  assert.equal(w.eva, false, 'back aboard');
+});
+
+test('auto EVA off: the miner never leaves on its own', () => {
+  const { SM, advance } = game(23);
+  const st = SM.State.get(); st.tutorial = false;
+  Object.assign(st.settings, { autopilot: true, autoEva: false });
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = []; w.time = 1e4;
+  let went = false;
+  for (let i = 0; i < 600; i++) { advance(0.05); w.hull = 100; if (w.eva) went = true; }
+  assert.equal(went, false);
+});
+
+test('every field plays two minutes with autopilot and auto EVA without errors', () => {
+  const { SM, advance } = game(41);
+  const st = SM.State.get(); st.tutorial = false;
+  Object.assign(st.settings, { autoFire: true, autopilot: true, autoEva: true });
+  let evas = 0;
+  for (const region of SM.DATA.REGIONS) {
+    SM.Sortie.start(region.id);
+    const w = SM.Sortie._debug();
+    for (let i = 0; i < 1200 && SM.Sortie.isRunning(); i++) { advance(0.1); if (w.eva && w.miner && w.miner.auto) { evas++; break; } }
+    for (let i = 0; i < 1200 && SM.Sortie.isRunning(); i++) advance(0.1);
+    if (SM.Sortie.isRunning()) SM.Sortie.end('return');
+  }
+  assert.ok(evas > 0, `auto EVA went out in ${evas} fields`);
+});

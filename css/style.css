@@ -188,7 +188,7 @@ body.lefty .wpn-wrap { grid-column: 3; }
 body.lefty .ctl.return { justify-self: start; }
 .toggles { grid-column: 1 / -1; grid-row: 1; display: flex; gap: 6px; justify-content: flex-end; }
 body.lefty .toggles { justify-content: flex-start; }
-.tgl { pointer-events: auto; opacity: var(--ctl-opacity); min-width: 56px; height: 44px; border-radius: 10px; border: 2px solid #fff3; background: #000a; color: var(--muted); font-weight: 900; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 6px; }
+.tgl { pointer-events: auto; opacity: var(--ctl-opacity); min-width: 48px; height: 44px; border-radius: 10px; border: 2px solid #fff3; background: #000a; color: var(--muted); font-weight: 900; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 5px; }
 .tgl small { font-size: 8px; font-weight: 700; }
 .tgl.on { border-color: var(--good); color: #fff; background: #1c7a4bcc; }
 

@@ -578,6 +578,7 @@ SM.UI = (function () {
       ${sw('autoFire', 'Auto-fire', 'Laser fires on its own at anything in range')}
       ${sw('autoBoost', 'Auto-boost', 'Boosts while flying when energy allows (burns more fuel)')}
       ${sw('autopilot', 'Autopilot', 'When you stop steering, fly to the next block and mine it')}
+      ${sw('autoEva', 'Auto EVA', 'When you stop steering, the miner spacewalks by itself: into giant rocks (autopilot parks at the hatch) and out to relics in reach')}
       ${sw('leftHanded', 'Left-handed layout', 'Buttons on the left, steer on the right')}
       ${sw('highContrast', 'High-contrast mode')}
       ${sw('captions', 'Captions', 'Text for warnings and audio cues')}

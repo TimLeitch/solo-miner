@@ -33,7 +33,7 @@ SM.State = (function () {
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
       settings: {
         volume: 0.6, vibration: true, shake: true, reducedFx: false,
-        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, leftHanded: false,
+        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, autoEva: true, leftHanded: false,
         highContrast: false, uiScale: 1, stickOpacity: 0.5, captions: true,
       },
     };

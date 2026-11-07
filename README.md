@@ -60,7 +60,7 @@
 
 ### Auto-play controls (added 2026-11-04)
 
-- **[DONE]** Three toggle buttons above MINE/BOOST during a sortie: **FIRE**, **BOOST** and **PILOT**. Each one is AUTO ON or AUTO OFF, saves with your settings, and is also in Settings. Desktop keys: F / B / G.
+- **[DONE]** Three toggle buttons above MINE/BOOST during a sortie: **FIRE**, **BOOST** and **PILOT**. Each one is AUTO ON or AUTO OFF, saves with your settings, and is also in Settings. Desktop keys: F / B / G. A fourth, **A-EVA** (key J), was added 2026-11-07 (see *Auto EVA*).
 - **[DONE]** Auto-fire (on by default): the laser fires by itself at whatever is in range. No need to hold MINE.
 - **[DONE]** Auto-boost (off by default): boosts whenever you're moving and have energy. It stops at empty and restarts at 50% energy. Boosting burns more fuel.
 - **[DONE]** Autopilot (on by default, only during a sortie): when you stop steering for about half a second and nothing is in range, the ship flies itself to the next block and mines it. It goes to your tapped target first, otherwise it picks the nearest block, favouring valuable ones. It steers around debris and live electrical fields, and picks a new block if it gets stuck. Touch the stick and you're back in control instantly. A green dotted line shows where it's heading.
@@ -257,8 +257,23 @@ Tim: "a larger block ... you have to EVA and enter it ... hollow it out from the
 - **[DONE]** Existing tests adjusted: giant cells aren't counted in `w.left` until the shell opens. The "every field plays for a minute" test now runs 70 s, because Corona Shelf on that seed spent the whole minute on one alloy block (slow on purpose, not a bug).
 - **[NEEDS DECISION]** **Late-field dig time.** From Singularity Edge on, a giant takes longer to drill than a whole 3-minute sortie with a base drill, and progress doesn't carry over to the next sortie (fields are new every launch). That pushes drill upgrades hard, which is the point, but it may feel like a wall. Options: keep it, lower `tierHp` (0.35), or let a half-dug giant persist for the next launch.
 - **[NEEDS DECISION]** **Rewards:** are ~1/3 of a field's value per giant (Nearside) and the jackpot sizes right? Should a cracked giant also drop a guaranteed relic, or count toward contracts (e.g. a "Crack a giant rock" contract)?
-- **[NEEDS DECISION]** Should autopilot or the escort wing help more (e.g. autopilot parks at the hatch when you tap EVA near a giant)? Right now getting there and going in is manual on purpose.
+- **[DONE - Tim, 2026-11-07]** Autopilot now parks at the hatch and the miner goes in on its own when **Auto EVA** is on (see *Auto EVA* below). With Auto EVA off it is still fully manual.
 - **[TODO]** Sound: it reuses the existing chimes and booms; no dedicated "shell opens" sound yet.
+
+### Auto EVA (added 2026-11-07 at Tim's request)
+
+Tim: "Let's add an automatic EVA system, just like we have autopilot, auto weapon... Let's also add an auto EVA."
+
+- **[DONE]** New **A-EVA** toggle with the other auto buttons (FIRE / BOOST / PILOT / WPN), also in Settings as *Auto EVA*. Desktop key **J**. It is a free setting like autopilot, **on by default** (existing saves get it switched on too).
+- **[DONE]** Like autopilot, it only acts when you are not steering (about half a second hands-off). Touch the stick during a spacewalk and you drive the miner; let go and the auto EVA picks up again. Tapping EVA yourself still works as before (a spacewalk you start by hand stays manual).
+- **[DONE]** **Giant rocks:** with autopilot on, the ship flies to the nearest giant that still needs hollowing and parks just outside its gold hatch. With a full oxygen tank the miner goes out, lines up with the hatch, walks in and drills the nearest core cell, cell after cell. It reels home with enough oxygen to get back (no low-oxygen alarm), the ship waits at the hatch while the tank refills (~15 s), and it goes back in. Once the core is gone the miner boards and autopilot breaks the shell for the jackpot. The ship laser keeps firing at anything in range while it waits.
+- **[DONE]** It skips a giant it can't finish in the time left (estimated from your drill power, with time for refills), so a late-field giant doesn't eat the whole sortie. A giant you have already started is always finished if there's time.
+- **[DONE]** **Relics:** when the ship is idle and a relic is within tether reach (220 units), the miner goes out to fetch it, then any other relic in reach, and comes back. Relics an escort collector drone is already fetching are left to the drone. If it can't reach a relic on one tank, or walks into a wall for 2 s, it gives up on that relic for the rest of the field.
+- **[DONE]** On the walk it sidesteps debris, drills anything in reach automatically (even with auto-fire off), and comes home with 4 s left on the shift clock.
+- **[DONE]** Toggle bar buttons are a little narrower (min 48 px) so all six fit on a 360 px phone. Checked in Chromium at 360x740.
+- **[DONE]** Tests: autopilot + auto EVA parks at a giant, goes in through the hatch, hollows it over more than one tank and then the ship cracks it; it fetches a relic and comes back aboard; with it off the miner never leaves; every field plays two minutes with it on, no errors. The other tests run with auto EVA off so they still see the ship on its own. `node --test tests/` 29 pass. Service worker cache bumped to v23.
+- **[NEEDS DECISION]** **Free or bought?** I made it a free setting like autopilot. It could instead be a module you buy (e.g. an "EVA suit computer" in Upgrades > Miner) if you want another reason to spend credits. Say which.
+- **[NEEDS DECISION]** **On by default?** It is on for everyone, including existing saves. Relic runs pause the ship for a few seconds while the miner is out. Turn it off by default instead?
 
 ### Ship weapons & systems: wide beam, miniguns, sentries and more (added 2026-11-07 at Tim's request)
 
@@ -408,6 +423,7 @@ Players can make an account (email + password), sign in on any phone or computer
 8. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
 9. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
 10. **Ship weapons & systems:** are the prices and power right, should they unlock by rank or field, and should sentries be placed by hand? (See *Ship weapons & systems* above.)
+11. **Auto EVA:** keep it a free setting that is on by default, or make it a bought upgrade / off by default? (See *Auto EVA* above.)
 
 ## Game Design Document
 

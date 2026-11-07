@@ -330,7 +330,7 @@ SM.Sortie = (function () {
     $('btnMine').querySelector('small').textContent = s.autoFire ? 'auto' : 'hold';
     $('btnBoost').classList.toggle('auto', !!s.autoBoost);
     $('btnBoost').querySelector('small').textContent = s.autoBoost ? 'auto' : 'hold';
-    [['tglFire', 'autoFire'], ['tglBoost', 'autoBoost'], ['tglPilot', 'autopilot']].forEach(([id, k]) => {
+    [['tglFire', 'autoFire'], ['tglBoost', 'autoBoost'], ['tglPilot', 'autopilot'], ['tglAEva', 'autoEva']].forEach(([id, k]) => {
       const el = $(id); el.classList.toggle('on', !!s[k]); el.setAttribute('aria-pressed', s[k] ? 'true' : 'false');
       el.querySelector('small').textContent = s[k] ? 'AUTO ON' : 'AUTO OFF';
     });
@@ -447,7 +447,7 @@ SM.Sortie = (function () {
     $('btnReload').addEventListener('click', () => { SM.Audio.unlock(); if (running && !paused) buyReload(); });
     hold('btnMine', 'mine');
     hold('btnBoost', 'boost');
-    [['tglFire', 'autoFire', 'Auto-fire'], ['tglBoost', 'autoBoost', 'Auto-boost'], ['tglPilot', 'autopilot', 'Autopilot']].forEach(([id, k, label]) => {
+    [['tglFire', 'autoFire', 'Auto-fire'], ['tglBoost', 'autoBoost', 'Auto-boost'], ['tglPilot', 'autopilot', 'Autopilot'], ['tglAEva', 'autoEva', 'Auto EVA']].forEach(([id, k, label]) => {
       $(id).addEventListener('click', () => {
         SM.Audio.unlock(); SM.Audio.click();
         const st = settings(); st[k] = !st[k]; SM.State.save(); applyLayout();
@@ -478,6 +478,7 @@ SM.Sortie = (function () {
       if (e.code === 'KeyF') $('tglFire').click();
       if (e.code === 'KeyB') $('tglBoost').click();
       if (e.code === 'KeyG') $('tglPilot').click();
+      if (e.code === 'KeyJ') $('tglAEva').click();
       if (e.code === 'KeyH' && !$('tglWpn').hidden) $('tglWpn').click();
       if (e.code === 'Tab') { e.preventDefault(); w && (w.target = nearestBlock(w.S.range * 1.5)); }
     });
@@ -541,6 +542,14 @@ SM.Sortie = (function () {
   // Returns a steering vector {x,y} or null when the ship should hold position.
   function autopilot(dt) {
     const s = w.ship, S = w.S;
+    // auto EVA: park at the hatch of a giant rock that still needs hollowing (and wait there while oxygen refills)
+    const eg = settings().autoEva ? evaGiant() : null;
+    if (eg) {
+      w.apGoal = null;
+      const p = parkPoint(eg), dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1;
+      const m = Math.max(0, Math.min(1, (d - 3) / 70));
+      return m < 0.05 ? null : avoid(dx / d * m, dy / d * m);
+    }
     // already have something to shoot? keep mining it while easing in close,
     // so the escort wing (which works blocks near the ship) has more to hit
     if (w.target && w.target.alive && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range * 0.9) { w.apGoal = w.target; return closeIn(w.target); }
@@ -618,9 +627,11 @@ SM.Sortie = (function () {
     let mag = Math.hypot(mx, my); if (mag > 1) { mx /= mag; my /= mag; mag = 1; }
     if (mag > 0.1 && w.tut === 0 && !w.tutMoved) { w.tutMoved = true; setTimeout(() => tutorialStep(1), 1200); }
 
+    w.idle = mag > 0.1 ? 0 : (w.idle || 0) + dt; // seconds since the player last steered (ship or miner)
     // spacewalk: the stick drives the miner, the ship holds position
     if (w.eva) { updateEva(dt, mx, my, mag); mx = 0; my = 0; mag = 0; w.apIdle = 0; }
     else if (w.o2 < S.evaO2) { w.o2 = Math.min(S.evaO2, w.o2 + dt * 2); if (w.o2 >= S.evaO2) applyEvaUi(); } // refills aboard
+    else if (settings().autoEva && w.tut !== 0 && w.idle > 0.6) autoEvaLaunch(); // auto EVA: full tank, hands off
 
     // autopilot: when the player isn't steering, fly to the next block worth mining
     w.autopilot = false;
@@ -1174,7 +1185,12 @@ SM.Sortie = (function () {
     const m = w.miner, s = w.ship, S = w.S;
     w.o2 = Math.max(0, w.o2 - dt);
     if (w.o2 <= 0 && !m.reel) { m.reel = true; caption('Oxygen empty - tether reeling you in', 'danger'); SM.Audio.alarm(); vibrate([80, 60, 80]); }
-    if (w.o2 < 8 && !w.warned.o2) { w.warned.o2 = 1; SM.Audio.alarm(); caption('Oxygen low - head back to the ship', 'warn'); }
+    // auto EVA drives the miner whenever the player isn't steering (manual stick input always wins)
+    if (m.auto && !m.reel && mag < 0.1 && w.idle > 0.6) {
+      const a = autoEvaSteer(dt);
+      if (a) { mx = a.x; my = a.y; mag = Math.hypot(mx, my); }
+    }
+    if (w.o2 < 8 && !w.warned.o2 && !m.reel) { w.warned.o2 = 1; SM.Audio.alarm(); caption('Oxygen low - head back to the ship', 'warn'); }
     let tvx, tvy;
     if (m.reel) {
       const dx = s.x - m.x, dy = s.y - m.y, d = Math.hypot(dx, dy) || 1;
@@ -1193,7 +1209,7 @@ SM.Sortie = (function () {
     if (!m.reel) collideBlocks(m, 6, true);
     // hand drill: short range, ignores resistance
     m.drilling = false;
-    if (!m.reel && (input.mine || settings().autoFire)) {
+    if (!m.reel && (input.mine || settings().autoFire || m.auto)) {
       if (!m.target || !m.target.alive || Math.hypot(m.target.x - m.x, m.target.y - m.y) > D.EVA.drillRange + BS / 2) {
         m.target = null; let bd = D.EVA.drillRange + BS / 2;
         const gx = Math.floor(m.x / BS), gy = Math.floor(m.y / BS);
@@ -1229,6 +1245,99 @@ SM.Sortie = (function () {
     });
     if (m.inv > 0) m.inv -= dt;
     if (!sheltered) w.fields.forEach(f => { if (f.phase === 2 && Math.hypot(f.x - m.x, f.y - m.y) < f.r) w.o2 = Math.max(0, w.o2 - 4 * dt); });
+  }
+
+  // ---------- auto EVA (settings().autoEva, added 2026-11-07) ----------
+  // Aboard with a full tank and hands off the stick, the ship sends the miner out on its own:
+  // into a giant rock when parked at its hatch (autopilot parks there), or out to a loose relic within tether reach.
+  // On foot it walks the job, drills automatically, and reels home with enough oxygen left to get back.
+  const EVA_REEL_SPEED = 260;
+  // a giant rock worth going into: not hollow yet, and diggable in the time left (or already started)
+  function evaGiant() {
+    const s = w.ship, S = w.S;
+    let best = null, bd = Infinity;
+    for (const G of w.giants) {
+      if (G.open || G.cracked) continue;
+      if (G.started) { if (w.time < 8) continue; }
+      else {
+        let hp = 0; G.cells.forEach(c => { if (c.alive && c.part === 'core') hp += c.hp; });
+        const secs = hp / Math.max(0.1, S.drillDps * (1 + 2 * (S.drillSplash || 0))) * 1.6; // x1.6 for oxygen refills
+        if (secs > w.time - 10) continue;
+      }
+      const d = Math.hypot(G.hx - s.x, G.hy - s.y);
+      if (d < bd) { bd = d; best = G; }
+    }
+    return best;
+  }
+  function parkPoint(G) { return { x: G.hx + G.nx * BS * 1.6, y: G.hy + G.ny * BS * 1.6 }; }
+  // nearest loose relic (to point p) that the ship's tether reaches and no drone is already fetching
+  function evaRelic(p) {
+    const s = w.ship, reach = D.EVA.tether * 0.85;
+    let best = null, bd = Infinity;
+    for (const r of w.relics) {
+      if (!r.alive || r.evaSkip || w.wing.some(d => d.relic === r) || Math.hypot(r.x - s.x, r.y - s.y) > reach) continue;
+      const d = Math.hypot(r.x - p.x, r.y - p.y);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  }
+  function autoEvaLaunch() {
+    const s = w.ship;
+    if (w.eva || w.time < 8 || w.o2 < w.S.evaO2) return;
+    let job = null;
+    const G = evaGiant();
+    if (G) { const p = parkPoint(G); if (Math.hypot(p.x - s.x, p.y - s.y) < 40 && Math.hypot(s.vx, s.vy) < 40) job = { giant: G }; }
+    if (!job) { const r = evaRelic(s); if (r) job = { relic: r }; }
+    if (!job) return;
+    toggleEva();
+    if (!w.eva || !w.miner) return;
+    w.miner.auto = true; w.miner.job = job;
+    caption(job.giant ? 'Auto EVA: going into the giant rock' : 'Auto EVA: fetching a relic', 'good');
+  }
+  // steering vector for the miner, or null to hold still (it may also start the reel home)
+  function autoEvaSteer(dt) {
+    const m = w.miner, s = w.ship, job = m.job;
+    const home = Math.hypot(s.x - m.x, s.y - m.y) / EVA_REEL_SPEED + 3; // seconds of oxygen the trip home needs, plus margin
+    if (w.o2 < home) {
+      if (job.relic) job.relic.evaSkip = true; // couldn't reach it on one tank: don't keep trying
+      m.reel = true; caption('Auto EVA: reeling in to refill oxygen'); return null;
+    }
+    if (w.time < 4) { m.reel = true; caption('Auto EVA: shift ending - back aboard'); return null; }
+    let goal = null, stop = 0;
+    const G = job.giant;
+    if (G) {
+      if (G.open || G.cracked) { m.reel = true; return null; } // hollow: the ship takes it from here
+      const half = G.size * BS / 2;
+      if (Math.abs(m.x - G.x) < half && Math.abs(m.y - G.y) < half) {
+        // inside: walk to the nearest core cell still standing (the drill picks its own targets in reach)
+        let bd = Infinity;
+        G.cells.forEach(c => { if (c.alive && c.part === 'core') { const d = Math.hypot(c.x - m.x, c.y - m.y); if (d < bd) { bd = d; goal = c; } } });
+        stop = BS * 0.9;
+      } else {
+        // outside: line up one cell out from the hatch, then walk straight in through it
+        const ex = G.hx + G.nx * BS, ey = G.hy + G.ny * BS;
+        const lined = Math.hypot(m.x - ex, m.y - ey) < 10 || Math.hypot(m.x - G.hx, m.y - G.hy) < BS * 0.8;
+        goal = lined ? { x: G.hx - G.nx * BS, y: G.hy - G.ny * BS } : { x: ex, y: ey };
+      }
+    } else {
+      if (!job.relic || !job.relic.alive || job.relic.evaSkip) { job.relic = evaRelic(m); job.stuck = 0; }
+      if (!job.relic) { m.reel = true; caption('Auto EVA: all relics in reach collected'); return null; }
+      goal = job.relic;
+      // walking into a wall? give up on this relic after 2 s and try the next one
+      if (Math.hypot(m.vx, m.vy) < 12) { job.stuck = (job.stuck || 0) + dt; if (job.stuck > 2) { job.relic.evaSkip = true; job.relic = null; return null; } }
+      else job.stuck = 0;
+    }
+    if (!goal) { m.reel = true; return null; }
+    const dx = goal.x - m.x, dy = goal.y - m.y, d = Math.hypot(dx, dy) || 1;
+    const k = Math.max(0, Math.min(1, (d - stop) / 30));
+    let x = dx / d * k, y = dy / d * k;
+    if (!inGiant(m)) for (const db of w.debris) { // sidestep debris in open space
+      const ex = m.x - db.x, ey = m.y - db.y, dist = Math.hypot(ex, ey), r = db.r + 60;
+      if (dist < r) { const f = (r - dist) / 60 * 1.5; x += ex / (dist || 1) * f; y += ey / (dist || 1) * f; }
+    }
+    const mg = Math.hypot(x, y);
+    if (mg < 0.05) return null;
+    return mg > 1 ? { x: x / mg, y: y / mg } : { x, y };
   }
 
   // draw helpers for the wing, the miner and relics
