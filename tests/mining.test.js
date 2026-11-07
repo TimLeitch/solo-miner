@@ -11,7 +11,7 @@ function game(seed) {
     return randomState / 0x100000000;
   };
   const ctx = new Proxy({}, { get: (obj, key) => {
-    if (key === 'createLinearGradient') return () => ({ addColorStop() {} });
+    if (key === 'createLinearGradient' || key === 'createRadialGradient') return () => ({ addColorStop() {} });
     return obj[key] || (() => {});
   } });
   function element() {
@@ -223,4 +223,73 @@ test('breaking blocks counts down the field', () => {
   advance(30);
   assert.ok(w.broken > 0);
   assert.equal(w.left, w.blocks.filter(b => b.alive).length);
+});
+
+test('every field plays for a minute on autopilot without errors and has its own features', () => {
+  const { SM } = game(11);
+  const ids = SM.DATA.REGIONS.map(r => r.id);
+  assert.equal(new Set(ids).size, ids.length, 'unique ids');
+  for (let i = 1; i < SM.DATA.REGIONS.length; i++) {
+    assert.ok(SM.DATA.REGIONS[i].lifetime > SM.DATA.REGIONS[i - 1].lifetime, 'unlock order');
+  }
+  for (const region of SM.DATA.REGIONS) {
+    const g2 = game(100 + ids.indexOf(region.id));
+    const st = g2.SM.State.get();
+    st.tutorial = false; st.levels.laser = 12; st.levels.hull = 12;
+    g2.SM.Sortie.start(region.id);
+    const w = g2.SM.Sortie._debug();
+    assert.equal(w.wells.length, region.wells || 0, `${region.id} wells`);
+    assert.equal(w.foes.length, region.scavs || 0, `${region.id} scavengers`);
+    if (region.mines) assert.ok(w.mines.length >= region.mines - 2, `${region.id} mines ${w.mines.length}`);
+    g2.advance(60);
+    assert.ok(w.broken > 0, `${region.id}: mined something (${w.broken})`);
+  }
+});
+
+test('scavengers eat blocks and count down the field, and pay a bounty when shot', () => {
+  const { SM, advance } = game(21);
+  const st = SM.State.get(); st.tutorial = false; st.settings.autoFire = false; st.settings.autopilot = false;
+  SM.Sortie.start('scrapyard');
+  const w = SM.Sortie._debug();
+  w.debris = [];
+  const left = w.left;
+  advance(20);
+  assert.ok(w.left < left, `scavengers ate ${left - w.left} blocks`);
+  const f = w.foes.find(x => x.alive);
+  const before = w.credits;
+  f.x = w.ship.x + 40; f.y = w.ship.y; f.wait = 99;
+  st.settings.autoFire = true;
+  advance(10);
+  assert.equal(f.alive, false, 'the laser prefers scavengers in range');
+  assert.ok(w.credits >= before + f.value);
+});
+
+test('volatile ore chain-explodes, ice refuels, coral regrows', () => {
+  const { SM, advance } = game(5);
+  const st = SM.State.get(); st.tutorial = false; st.settings.autoFire = false; st.settings.autopilot = false;
+  SM.Sortie.start('ember');
+  let w = SM.Sortie._debug();
+  w.debris = []; w.flare = 999;
+  const vol = w.blocks.filter(b => b.mat === 'volatile' && b.alive);
+  const brokenBefore = w.broken;
+  vol[0].hp = 0.01; w.target = vol[0]; w.ship.x = vol[0].x; w.ship.y = vol[0].y + 150; st.settings.autoFire = true;
+  advance(1.5); st.settings.autoFire = false;
+  assert.ok(w.broken > brokenBefore + 1, `blast broke ${w.broken - brokenBefore} blocks`);
+
+  SM.Sortie.start('comet');
+  w = SM.Sortie._debug(); w.debris = [];
+  w.fuel = w.S.fuel * 0.5;
+  const ice = w.blocks.find(b => b.mat === 'ice');
+  ice.hp = 0.01; w.target = ice; w.ship.x = ice.x; w.ship.y = ice.y + 60; st.settings.autoFire = true;
+  advance(0.3);
+  assert.equal(ice.alive, false);
+  assert.ok(w.fuel > w.S.fuel * 0.5, 'ice refuelled the ship');
+  st.settings.autoFire = false;
+
+  SM.Sortie.start('reef');
+  w = SM.Sortie._debug(); w.debris = []; w.foes = [];
+  const coral = w.blocks.find(b => b.mat === 'coral');
+  coral.hp = coral.maxHp * 0.3; coral.hitAt = w.elapsed;
+  advance(5);
+  assert.ok(coral.hp > coral.maxHp * 0.6, 'coral grew back');
 });

@@ -21,7 +21,7 @@
 | `css/style.css` | All styling, mobile-first, safe-area aware |
 | `js/data.js` | **All tuning numbers** (materials, regions, upgrade costs, drone rates, base stats). Edit here to rebalance. |
 | `js/state.js` | Save/load (localStorage), derived stats, purchases, region unlocks, **offline gains**, contracts |
-| `js/sortie.js` | The mining run: world generation, touch stick, laser/heat, debris, electrical fields, rendering, HUD |
+| `js/sortie.js` | The mining run: world generation (6 layouts), touch stick, laser/heat, debris, field hazards (electrical fields, wind, gravity wells, flares, fog, mines, scavengers), rendering, HUD |
 | `js/ui.js` | Hangar, upgrade bay, fields, contracts, settings, summary and welcome-back screens |
 | `js/audio.js` | Synthesized sound effects (no audio files needed) |
 | `js/cloud.js` | **Accounts + cloud saves**: sign up / sign in / sign out / delete account, sync with Firebase, merging a cloud save with this device's save |
@@ -35,7 +35,7 @@
 - **[DONE]** Exact formulas (code: `js/state.js` > `accrue()` / `droneStatus()`; numbers: `js/data.js` > `DRONE`):
 
   ```
-  rate (cr/hr)   = ratePerHour[droneLevel] x regionMult[best unlocked field]
+  rate (cr/hr)   = ratePerHour[droneLevel] x drone multiplier of your best unlocked field (REGIONS[].drone)
   capacity (cr)  = rate x capHours[droneLevel]
   stored         = min(capacity, stored + rate x hoursSinceLastUpdate)
   full in (hrs)  = (capacity - stored) / rate
@@ -177,7 +177,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 ### Auto-advance on a cleared field (added 2026-11-06 at Tim's request)
 
-- [DONE] Break every block in the field before the sortie timer runs out and the run automatically warps to the **next world**: the next unlocked region after the one you are in (Nearside > Red Shard > Glass Moon > Far Orbit). The remaining time, fuel, hull, ammo and credits carry over (plus the clear bonus below); the ship and wing reappear at the dock of a fresh field. A caption and chime announce it.
+- [DONE] Break every block in the field before the sortie timer runs out and the run automatically warps to the **next world**: the next unlocked region after the one you are in (in the unlock order listed under *More fields* below). The remaining time, fuel, hull, ammo and credits carry over (plus the clear bonus below); the ship and wing reappear at the dock of a fresh field. A caption and chime announce it.
 - [DONE] If there is no further unlocked region, you warp into a fresh field of the same region, so clearing is never wasted.
 - [DONE] The hangar's selected region follows you, so your next launch starts in the world you reached.
 - [DONE] The sortie summary shows how many fields you cleared and where you ended up; every region you mined in pays its first-survey bonus. Contracts still score against the region you launched into.
@@ -189,6 +189,35 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
   - the bonus is banked safely: an emergency (hull) return never cuts it
   - example at Threat 1: a full Nearside field is about 7,300 cr, so clearing it with 60 s left pays about 11,700 cr on top. Red Shard is about 24,000 cr per field, Glass Moon 47,000, Far Orbit 116,000.
 - **[NEEDS DECISION]** Are these numbers right? And should clearing a field also unlock the next region early? Right now it only advances to regions you have already unlocked.
+
+### More fields: 13 worlds with their own hazards (added 2026-11-07 at Tim's request)
+
+Tim: "lets get a bunch more fields to play with different things in them". There are now **13 fields** (9 new), each with its own rock layout, materials and hazards. Everything is tunable in `js/data.js` > `REGIONS` and `MATERIALS`; the mechanics are in `js/sortie.js` > `generate()` and `updateHazards()`. Fields unlock in this order, and a field clear warps you along it.
+
+| Field | Unlock | What's different |
+| ----- | ------ | ---------------- |
+| Nearside Belt | start | unchanged |
+| **Comet Wake** (new) | 1,000 cr, Laser 1 | long ore **seams** of comet ice; a **solar wind** current drags the ship; **ice refuels** you |
+| Red Shard Field | 2,500 cr, Laser 2 | unchanged |
+| **Scrapyard Drift** (new) | 5,000 cr, Laser 2 | hundreds of **small scattered rocks**; **scavenger drones** fly around eating blocks. The laser locks onto them first; kill one for a bounty (missiles, grenades, mines and drone flak hit them too) |
+| Glass Moon | 8,000 cr, Laser 3 | unchanged |
+| **Ember Reach** (new) | 12,000 cr, Laser 3 | **volatile ore** explodes when it breaks and sets off its neighbours (chain reactions); **solar flares** every ~24 s make the laser run hot and burn the hull unless a rock is above you ("shaded" shows on screen) |
+| **Veil Nebula** (new) | 16,000 cr, Laser 3 | **fog**: you only see ~250 units around the ship; hidden **proximity mines**; **plasma pearls** refill boost and dump half your laser heat |
+| Far Orbit | 22,000 cr, Laser 4 | unchanged |
+| **Singularity Edge** (new) | 35,000 cr, Laser 5 | **gravity wells** pull you in and crush the hull at the core; rock **rings** orbit them with **star gold** on the inner edge; **void stone** armour |
+| **Living Reef** (new) | 55,000 cr, Laser 5 | **geodes**: a shell of **living coral** (regrows if you stop cutting) around a rich gold/alloy centre; scavengers; electrical fields |
+| **Old Warfront** (new) | 80,000 cr, Laser 6 | **barricade walls** of void stone across the field with gaps; alloy pockets between them; lots of mines |
+| **Corona Shelf** (new) | 120,000 cr, Laser 7 | seams packed with gold and volatile ore, strong swinging solar wind, frequent flares |
+| **Void Rift** (new) | 200,000 cr, Laser 8 | everything at once: fog, gravity wells, mines and scavengers around void-stone geodes full of alloy |
+
+- [DONE] New materials: Comet ice (refuels), Volatile ore (explodes), Plasma pearl (energy + cools laser), Living coral (regrows), Void stone (armour: 3.5x resistance, cheap; blast it, drill it on a spacewalk, or go around), Star gold (190 cr, between iridium and alloy). Each has its own glyph so they don't rely on colour.
+- [DONE] New hazards and their counters: shockwave disarms mines in its radius and any explosion sets mines off early; autopilot steers around mines and well cores; a wing shield blocks a mine blast.
+- [DONE] The Fields screen lists each field's features in plain words (material notes stay hidden until you discover that material or unlock the field), plus its drone-bay multiplier.
+- [DONE] Offline drone bay: each field now carries its own multiplier (`drone` in `REGIONS`, replaces `DRONE.regionMult`). Old fields keep x1 / x1.5 / x2.2 / x3; new ones go Comet x1.2 ... Void Rift x7.5.
+- [DONE] Relic value is per field (`relic` in `REGIONS`).
+- [DONE] Tests: every field is played for a minute on autopilot without errors; scavengers, volatile chains, ice refuel and coral regrowth each have a test (`node --test tests/`).
+- **[NEEDS DECISION]** Unlock costs and Laser levels for the late fields (35k to 200k lifetime, Laser 5 to 8) are my guesses. Without drones or weapons, late fields are slow (an alloy block takes ~60 s at the recommended laser), so the wing and weapons matter there. Tell me if you want them faster.
+- **[NEEDS DECISION]** Existing saves with enough lifetime credits will unlock Comet Wake, Scrapyard Drift and so on right away, and auto-advance now steps through them (e.g. Nearside > Comet Wake > Red Shard). OK, or should new fields only unlock going forward?
 
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
@@ -308,6 +337,7 @@ Players can make an account (email + password), sign in on any phone or computer
 5. **Monetization** - left out entirely per the fair-play section. Confirm that's fine for now.
 6. **Cloud saves:** ~~Firebase setup~~ done. Still open: do you want Google sign-in as well as email + password? Recommended: restrict the API key to your site (step 6 of the Firebase setup).
 7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
+8. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
 
 ## Game Design Document
 

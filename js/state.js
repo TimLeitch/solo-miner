@@ -332,12 +332,12 @@ SM.State = (function () {
   function droneRate() { // credits per hour
     const l = lvl('drone');
     const best = Math.max(0, ...s.unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-    return droneBaseRate(l) * D.DRONE.regionMult[best] * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
+    return droneBaseRate(l) * D.REGIONS[best].drone * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
   }
   function droneCap() { return droneCapHours(lvl('drone')); }
   function droneCapCredits() { return droneRate() * droneCap(); }
   /* Drone storage formula (runs in real time, whether the game is open, in the background or closed):
-   *   rate      = ratePerHour[droneLevel] x regionMult[best unlocked field]      (credits / hour)
+   *   rate      = ratePerHour[droneLevel] x drone[best unlocked field]      (credits / hour)
    *   capacity  = rate x capHours[droneLevel]                                    (credits)
    *   storage   = min(capacity, storage + rate x hoursSinceLastTick)
    * Any time the rate changes (drone upgrade, new field) we accrue first, so earnings

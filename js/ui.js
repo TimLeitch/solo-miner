@@ -91,7 +91,7 @@ SM.UI = (function () {
   function clock(t) { return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + (new Date(t).toDateString() !== new Date().toDateString() ? ' tomorrow' : ''); }
   function droneMult() {
     const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-    return D.DRONE.regionMult[best];
+    return D.REGIONS[best].drone;
   }
   // Plain-language formula block, shared by the hangar card, the drone tab and the welcome-back screen.
   function droneFormula(ds) {
@@ -317,7 +317,7 @@ SM.UI = (function () {
       html += `<h3>Offline drone bay</h3>`;
       const l = St.lvl('drone');
       const best = Math.max(0, ...St.get().unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-      const mult = D.DRONE.regionMult[best];
+      const mult = D.REGIONS[best].drone;
       const wingMult = 1 + D.WING.offlineBonus * St.get().wing.count;
       const nxt = ` &rarr; <b>${fmt(St.droneBaseRate(l + 1) * mult * wingMult)} cr/hr, ${St.droneCapHours(l + 1)}h</b>`;
       html += upgradeRow(D.DRONE, 'drone', `${fmt(St.droneRate())} cr/hr, stores ${St.droneCap()}h (${fmt(St.droneCapCredits())} cr)` + nxt);
@@ -417,6 +417,7 @@ SM.UI = (function () {
       }).join('');
       const sel = s.region === r.id;
       const recLaser = r.laser;
+      const feats = D.features(r, m => s.discovered[m] || rs.unlocked);
       let foot;
       if (rs.unlocked) {
         foot = sel ? '<span class="tag blue">SELECTED</span>' : `<button class="btn small-btn" data-region="${r.id}">Select</button>`;
@@ -427,7 +428,8 @@ SM.UI = (function () {
         <div class="row"><b>${rs.unlocked ? '' : '&#128274; '}${esc(r.name)}</b><span class="small muted">Hazard: ${r.hazard}</span></div>
         <div class="small muted">${esc(r.desc)}</div>
         <div class="mats">${chips}</div>
-        <div class="small muted">Recommended: Laser Lv ${recLaser}+${r.fields ? ', Hull Lv 3+' : ''}. First-visit bonus: ${fmt(r.bonus)} cr</div>
+        ${feats.length ? `<ul class="feats small">${feats.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+        <div class="small muted">Recommended: Laser Lv ${recLaser}+${D.REGIONS.indexOf(r) >= 4 ? ', Hull Lv 3+' : ''}. First-visit bonus: ${fmt(r.bonus)} cr. Drone bay x${r.drone}</div>
         <div style="margin-top:8px">${foot}</div>
       </div>`;
     }).join('');

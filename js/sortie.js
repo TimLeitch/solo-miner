@@ -58,20 +58,83 @@ SM.Sortie = (function () {
       blocks.push(b); grid.set(k, b);
     }
     const centers = [];
-    for (let c = 0; c < region.clusters; c++) {
+    // find a spot at least `gap` from every other deposit (gives up after 40 tries)
+    function spot(gap, margin) {
       let cx, cy, tries = 0;
-      do {
-        cx = rand(240, W - 240); cy = rand(240, H - 460); tries++;
-      } while (tries < 40 && centers.some(p => Math.hypot(p.x - cx, p.y - cy) < 350));
-      centers.push({ x: cx, y: cy });
-      const R = rand(4, 6.5);
-      const gcx = Math.round(cx / BS), gcy = Math.round(cy / BS);
+      const m = margin || 240;
+      do { cx = rand(m, W - m); cy = rand(m, H - 460); tries++; }
+      while (tries < 40 && centers.some(p => Math.hypot(p.x - cx, p.y - cy) < gap));
+      const p = { x: cx, y: cy }; centers.push(p); return p;
+    }
+    // a wobbly round deposit; hollow = geode (thick shell, empty gap, rich centre)
+    function blob(cx, cy, R, hollow) {
+      const gcx = Math.round(cx / BS), gcy = Math.round(cy / BS), n = Math.ceil(R * 1.4) + 1;
       const wob = [rand(0, 6), rand(0.3, 0.9), rand(0, 6), rand(0.2, 0.6)];
-      for (let dx = -8; dx <= 8; dx++) for (let dy = -8; dy <= 8; dy++) {
+      for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) {
         const a = Math.atan2(dy, dx);
         const edge = R * (1 + 0.22 * Math.sin(a * 3 + wob[0]) * wob[1] + 0.15 * Math.sin(a * 5 + wob[2]) * wob[3]);
         const d = Math.hypot(dx, dy);
-        if (d <= edge) place(gcx + dx, gcy + dy, pick(d < edge * 0.45 ? region.core : region.shell));
+        if (d > edge) continue;
+        if (hollow) {
+          if (d < edge * 0.36) place(gcx + dx, gcy + dy, pick(region.core));
+          else if (d > edge - 1.8) place(gcx + dx, gcy + dy, pick(region.shell));
+        } else place(gcx + dx, gcy + dy, pick(d < edge * 0.45 ? region.core : region.shell));
+      }
+    }
+    // gravity wells come first so the 'ring' layout can wrap rock around them
+    const wells = [];
+    for (let i = 0; i < (region.wells || 0); i++) {
+      const p = spot(560, 300);
+      wells.push({ x: p.x, y: p.y, r: 270, core: 26, t: rand(0, 6) });
+    }
+    const layout = region.layout || 'clusters';
+    if (layout === 'clusters') {
+      for (let c = 0; c < region.clusters; c++) { const p = spot(350); blob(p.x, p.y, rand(4, 6.5)); }
+    } else if (layout === 'scatter') {
+      for (let c = 0; c < region.clusters * 4; c++) { const p = spot(150, 120); blob(p.x, p.y, rand(2, 3.6)); }
+    } else if (layout === 'geodes') {
+      for (let c = 0; c < region.clusters; c++) { const p = spot(330); blob(p.x, p.y, rand(5.5, 7.5), true); }
+    } else if (layout === 'veins') {
+      // long seams: a wavy line of rock, ore richest along its middle
+      for (let c = 0; c < Math.round(region.clusters * 1.6); c++) {
+        const p = spot(220, 160);
+        const len = rand(12, 22), a0 = rand(0, Math.PI), bend = rand(-0.08, 0.08), hw0 = rand(1.4, 2.3);
+        let x = p.x / BS - Math.cos(a0) * len / 2, y = p.y / BS - Math.sin(a0) * len / 2, a = a0;
+        for (let t = 0; t <= len; t += 0.5) {
+          const hw = hw0 * (0.7 + 0.5 * Math.sin(t * 0.7 + c));
+          const nx = -Math.sin(a), ny = Math.cos(a);
+          for (let o = -hw; o <= hw; o += 0.5) place(Math.round(x + nx * o), Math.round(y + ny * o), pick(Math.abs(o) < hw * 0.4 ? region.core : region.shell));
+          x += Math.cos(a) * 0.5; y += Math.sin(a) * 0.5; a += bend;
+        }
+      }
+    } else if (layout === 'ring') {
+      // a ring of rock around each gravity well; the rich stuff is on the inside edge
+      const hubs = wells.length ? wells : [{ x: W / 2, y: H / 2 - 200 }];
+      hubs.forEach(h => {
+        const gcx = Math.round(h.x / BS), gcy = Math.round(h.y / BS), ri = rand(3.6, 4.6), ro = ri + rand(3.4, 4.6), ph = rand(0, 6);
+        const n = Math.ceil(ro) + 1;
+        for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) {
+          const d = Math.hypot(dx, dy), a = Math.atan2(dy, dx), wo = 0.6 * Math.sin(a * 4 + ph);
+          if (d < ri + wo || d > ro + wo) continue;
+          if (Math.sin(a * 3 + ph) > 0.93) continue; // a few gaps to fly through
+          place(gcx + dx, gcy + dy, pick(d < ri + wo + 1.3 ? region.core : region.shell));
+        }
+      });
+      for (let c = 0; c < region.clusters; c++) { const p = spot(260); blob(p.x, p.y, rand(2.8, 4.5)); }
+    } else if (layout === 'walls') {
+      // barricades: bands of rock across the field with a couple of gaps, rich pockets between them
+      const cols = Math.floor(W / BS);
+      for (let y = 7; y * BS < H - 520; y += Math.round(rand(6, 8))) {
+        const thick = Math.round(rand(2, 3)), gaps = [rand(3, cols - 6), rand(3, cols - 6)];
+        for (let gx = 1; gx < cols; gx++) {
+          if (gaps.some(g0 => gx >= g0 && gx < g0 + 3.5)) continue;
+          for (let k = 0; k < thick; k++) place(gx, y + k, pick(region.shell));
+        }
+        for (let k = 0; k < 2; k++) {
+          const px = Math.round(rand(4, cols - 4)), py = y + thick + 2;
+          centers.push({ x: px * BS, y: py * BS });
+          for (let dx = -2; dx <= 2; dx++) for (let dy = -1; dy <= 1; dy++) if (Math.abs(dx) + Math.abs(dy) < 3) place(px + dx, py + dy, pick(region.core));
+        }
       }
     }
     // a few loose blocks drifting near the dock so the first targets are close
@@ -98,19 +161,36 @@ SM.Sortie = (function () {
     }
     // relics: small salvage only the miner can pick up on a spacewalk
     const relics = [];
-    const tier = D.REGIONS.indexOf(region);
+    if (!centers.length) centers.push({ x: W / 2, y: H / 2 - 200 });
     for (let i = 0, tries = 0; i < D.EVA.relicsPerField && tries < 200; tries++) {
       const c = centers[Math.floor(Math.random() * centers.length)];
       const x = c.x + rand(-200, 200), y = c.y + rand(-200, 200);
       if (x < 40 || y < 40 || x > W - 40 || y > H - 300) continue;
       if (grid.has(key(Math.floor(x / BS), Math.floor(y / BS)))) continue;
-      relics.push({ x, y, value: Math.round([60, 140, 240, 380][tier] * TH.value * rand(0.8, 1.3)), alive: true, t: rand(0, 6) });
+      relics.push({ x, y, value: Math.round((region.relic || 60) * TH.value * rand(0.8, 1.3)), alive: true, t: rand(0, 6) });
       i++;
     }
     // stars
     const stars = [];
     for (let i = 0; i < 260; i++) stars.push({ x: rand(0, W), y: rand(0, H), z: rand(0.2, 1), s: rand(0.5, 1.8) });
-    return { blocks, grid, dock, debris, fields, stars, relics };
+    // proximity mines (kept away from the dock and from rock so they sit in the open lanes)
+    const mines = [];
+    for (let i = 0, tries = 0; i < (region.mines || 0) && tries < 400; tries++) {
+      const x = rand(80, W - 80), y = rand(80, H - 380);
+      if (Math.hypot(x - dock.x, y - dock.y) < 380 || grid.has(key(Math.floor(x / BS), Math.floor(y / BS)))) continue;
+      if (mines.some(m => Math.hypot(m.x - x, m.y - y) < 160)) continue;
+      mines.push({ x, y, arm: -1, alive: true, t: rand(0, 6) }); i++;
+    }
+    // scavenger drones: they fly to the nearest block and eat it. Shoot them for a bounty.
+    const foes = [];
+    for (let i = 0; i < (region.scavs || 0); i++) {
+      let x, y; do { x = rand(80, W - 80); y = rand(80, H - 600); } while (Math.hypot(x - dock.x, y - dock.y) < 600);
+      const hp = M.scav.health * TH.hp;
+      foes.push({ foe: true, mat: 'scav', x, y, vx: 0, vy: 0, a: 0, hp, maxHp: hp, value: Math.round(M.scav.value * TH.value),
+        alive: true, seed: rand(0, 1000), flash: 0, prey: null, eat: 0, wait: rand(2, 6) });
+    }
+    const regrow = blocks.filter(b => M[b.mat].regen);
+    return { blocks, grid, dock, debris, fields, stars, relics, wells, mines, foes, regrow };
   }
   function newDebris(region, dock) {
     let x, y;
@@ -159,6 +239,7 @@ SM.Sortie = (function () {
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
       autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
       left: world.blocks.length, startRegion: region, cleared: 0, surveyed: {}, fieldCr: 0, clearBonus: 0,
+      booms: [], flare: region.flares ? region.flares.every * 0.6 : 0, flareOn: 0, windA: rand(0, Math.PI * 2), foeKills: 0,
     });
     st.wing.drones.forEach((cfg, i, all) => {
       const ph = i / all.length * Math.PI * 2;
@@ -360,6 +441,8 @@ SM.Sortie = (function () {
   }
   function selectAt(sx, sy) {
     const p = screenToWorld(sx, sy);
+    const foe = nearestFoe(p.x, p.y, 40);
+    if (foe) { w.target = foe; SM.Audio.click(); return; }
     let best = null, bd = 34; // forgiving touch radius
     const gx = Math.floor(p.x / BS), gy = Math.floor(p.y / BS);
     for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
@@ -445,6 +528,15 @@ SM.Sortie = (function () {
       const dx = s.x - f.x, dy = s.y - f.y, dist = Math.hypot(dx, dy);
       if (dist < f.r + 40) { const k = 1.5; x += dx / (dist || 1) * k; y += dy / (dist || 1) * k; }
     }
+    for (const mn of w.mines) {
+      if (!mn.alive) continue;
+      const dx = s.x - mn.x, dy = s.y - mn.y, dist = Math.hypot(dx, dy);
+      if (dist < 130) { const f = (130 - dist) / 130 * 1.8; x += dx / (dist || 1) * f; y += dy / (dist || 1) * f; }
+    }
+    for (const wl of w.wells) {
+      const dx = s.x - wl.x, dy = s.y - wl.y, dist = Math.hypot(dx, dy);
+      if (dist < wl.core + 90) { const f = 1.6; x += dx / (dist || 1) * f; y += dy / (dist || 1) * f; }
+    }
     const m = Math.hypot(x, y);
     if (m < 0.05) return null;
     return m > 1 ? { x: x / m, y: y / m } : { x, y };
@@ -520,6 +612,10 @@ SM.Sortie = (function () {
     // targeting
     if (w.target && !w.target.alive) w.target = null;
     const wantFire = !w.eva && (input.mine || settings().autoFire);
+    // scavengers in range jump the queue: every second they live they are eating your field
+    if (wantFire && settings().aimAssist && w.foes.length && !(w.target && w.target.foe)) {
+      const f = nearestFoe(s.x, s.y, S.range); if (f) w.target = f;
+    }
     let inRange = w.target && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= S.range;
     if (wantFire && (!w.target || (!inRange && settings().autoFire)) && settings().aimAssist) {
       const nb = autoTarget(S.range);
@@ -531,8 +627,8 @@ SM.Sortie = (function () {
     if (canFire) {
       const b = w.target, m = M[b.mat];
       b.hp -= S.dps / m.res * dt;
-      b.flash = 0.08;
-      w.heat += dt;
+      b.flash = 0.08; b.hitAt = w.elapsed;
+      w.heat += dt * (w.flareOn > 0 ? FLARE_HEAT : 1);
       // safety vent: stop before the limit, cool off, then carry on mining by itself
       if (w.heat >= S.heat * D.BASE.ventAt) { w.overheated = true; SM.Audio.overheat(); caption('Laser venting heat - resumes automatically', 'warn'); }
       w.hitTick -= dt;
@@ -546,9 +642,9 @@ SM.Sortie = (function () {
       const frac = b.hp / b.maxHp;
       b.state = frac > 0.66 ? 0 : frac > 0.33 ? 1 : 2;
       if (b.state > prevState) SM.Audio.crack();
-      if (b.hp <= 0) breakBlock(b);
+      if (b.hp <= 0) { if (b.foe) killFoe(b); else breakBlock(b); }
     } else {
-      w.heat = Math.max(0, w.heat - S.cool * dt);
+      w.heat = Math.max(0, w.heat - S.cool * dt * (w.flareOn > 0 ? 0.5 : 1));
       if (w.overheated && w.heat <= S.heat * D.BASE.resumeAt) { w.overheated = false; caption('Laser cooled - mining again', 'good'); }
     }
     if (!w) return; // the sortie may have ended inside updateEva
@@ -576,6 +672,8 @@ SM.Sortie = (function () {
       f.phase = f.t < 3 ? 0 : f.t < 4.2 ? 1 : 2;
       if (f.phase === 2 && Math.hypot(f.x - s.x, f.y - s.y) < f.r) damage(11 * TH.hazard * dt, null, true);
     });
+    updateHazards(dt);
+    if (!w || w.ended) return;
 
     // particles / popups
     w.particles = w.particles.filter(p => { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; return p.t < p.life; });
@@ -600,6 +698,136 @@ SM.Sortie = (function () {
     if (w.fuel <= 0) { caption('Fuel empty - towed back to the hangar', 'warn'); return end('fuel'); }
     if (w.time <= 0) return end('time');
     if (w.left <= 0 && !w.eva) advanceWorld(); // field cleared with time to spare
+  }
+
+  // ---------- field features (see DATA.REGIONS) ----------
+  const FLARE_HEAT = 2.2;   // laser heats this much faster during a solar flare
+  function nearestFoe(x, y, maxD) {
+    let best = null, bd = maxD;
+    for (const f of w.foes) { if (!f.alive) continue; const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; best = f; } }
+    return best;
+  }
+  function killFoe(f) {
+    if (!f.alive) return;
+    f.alive = false;
+    w.credits += f.value; w.xp += M.scav.xp; w.foeKills++;
+    SM.Audio.boom(); vibrate(40);
+    for (let i = 0; i < 22; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(50, 190);
+      w.particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.4, 0.8), color: i % 2 ? M.scav.color : '#ffd76a', size: rand(2, 4) });
+    }
+    w.pops.push({ x: f.x, y: f.y - 8, text: '+' + f.value + ' bounty', t: 0, color: '#ffd76a', size: 16 });
+    if (w.target === f) w.target = null;
+  }
+  function disarmMine(m) {
+    m.alive = false;
+    w.pops.push({ x: m.x, y: m.y - 8, text: 'mine disarmed', t: 0, color: '#7fe3ff', size: 12 });
+  }
+  // is a rock between the ship and the sun (straight up the screen)? then a flare can't burn the hull
+  function shaded(x, y) {
+    const gx = Math.floor(x / BS), gy = Math.floor(y / BS);
+    for (let dy = 1; dy <= 4; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const b = w.grid.get(key(gx + dx, gy - dy)); if (b && b.alive) return true;
+    }
+    return false;
+  }
+  function updateHazards(dt) {
+    const s = w.ship, R = w.region;
+    // solar wind: a current that drags the ship and debris
+    if (R.wind) {
+      w.windA += R.wind.turn * dt;
+      const sp = R.wind.speed * Math.min(1.5, Math.sqrt(TH.hazard));
+      const wx = Math.cos(w.windA) * sp, wy = Math.sin(w.windA) * sp;
+      if (!w.eva) { s.x += wx * dt; s.y += wy * dt; s.x = Math.max(SHIP_R, Math.min(W - SHIP_R, s.x)); s.y = Math.max(SHIP_R, Math.min(H - SHIP_R, s.y)); collideBlocks(s); }
+      w.debris.forEach(d => { d.x += wx * 0.6 * dt; d.y += wy * 0.6 * dt; });
+      if (!settings().reducedFx && Math.random() < 0.6) {
+        const hw = cw / 2 / scale, hh = ch / 2 / scale;
+        w.particles.push({ x: w.cam.x + rand(-hw, hw), y: w.cam.y + rand(-hh, hh), vx: wx * 5, vy: wy * 5, t: 0, life: 0.5, color: 'rgba(210,235,255,0.45)', size: 1.5 });
+      }
+    }
+    // gravity wells: pull toward the centre, the core crushes the hull
+    w.wells.forEach(wl => {
+      wl.t += dt;
+      const pull = 170 * Math.min(1.6, Math.pow(TH.hazard, 0.3));
+      const dx = wl.x - s.x, dy = wl.y - s.y, d = Math.hypot(dx, dy) || 1;
+      if (d < wl.r && !w.eva) {
+        const k = pull * (1 - d / wl.r);
+        s.vx += dx / d * k * dt * 3; s.vy += dy / d * k * dt * 3;
+        if (!w.warned.well) { w.warned.well = 1; caption('Gravity well - boost out of the pull', 'warn'); }
+      }
+      if (d < wl.core + SHIP_R && !w.eva) damage(20 * TH.hazard * dt, 'Gravity well', true);
+      w.debris.forEach(o => {
+        const ex = wl.x - o.x, ey = wl.y - o.y, ed = Math.hypot(ex, ey) || 1;
+        if (ed < wl.r) { o.vx += ex / ed * 40 * dt; o.vy += ey / ed * 40 * dt; }
+      });
+    });
+    // solar flares: warning, then the laser runs hot and unshaded hulls burn
+    if (R.flares) {
+      const F = R.flares;
+      if (w.flareOn > 0) {
+        w.flareOn -= dt;
+        if (!shaded(s.x, s.y) && !w.eva) damage(3 * TH.hazard * dt, 'Solar flare', true);
+        if (w.flareOn <= 0) { w.flare = F.every; caption('Flare passed', 'good'); }
+      } else {
+        w.flare -= dt;
+        if (w.flare <= F.warn && !w.warned.flare) { w.warned.flare = 1; SM.Audio.alarm(); caption('Solar flare incoming - get a rock above you', 'warn'); vibrate([40, 40, 40]); }
+        if (w.flare <= 0) { w.flareOn = F.dur; w.warned.flare = 0; }
+      }
+    }
+    // mines: blink when something comes close, then blow
+    w.mines.forEach(m => {
+      if (!m.alive) return;
+      m.t += dt;
+      if (m.arm < 0) {
+        const near = Math.hypot(m.x - s.x, m.y - s.y) < 80 || w.wing.some(d => Math.hypot(m.x - d.x, m.y - d.y) < 45);
+        if (near) { m.arm = 0.9; SM.Audio.alarm(); }
+        return;
+      }
+      m.arm -= dt;
+      if (m.arm <= 0) {
+        m.alive = false;
+        explode(m.x, m.y, 95, 40 * TH.hp, '#ff4d4d');
+        if (Math.hypot(m.x - s.x, m.y - s.y) < 95 + SHIP_R && !w.eva) { if (!shieldBlock()) damage(22 * TH.hazard, 'Mine blast'); }
+      }
+    });
+    // volatile ore: queued blasts so chain reactions ripple outward instead of happening all at once
+    if (w.booms.length) {
+      const due = w.booms.filter(b => (b.t -= dt) <= 0);
+      w.booms = w.booms.filter(b => b.t > 0);
+      due.forEach(b => {
+        explode(b.x, b.y, 58, 30 * TH.hp, '#ff5a36');
+        if (w && Math.hypot(b.x - s.x, b.y - s.y) < 30 + SHIP_R && !w.eva && s.inv <= 0) { damage(6 * TH.hazard, 'Volatile blast'); s.inv = 0.5; } // only a ship hugging the rock gets hurt
+      });
+    }
+    // living coral grows back when nothing has cut it for a moment
+    w.regrow.forEach(b => {
+      if (!b.alive || b.hp >= b.maxHp || w.elapsed - (b.hitAt || 0) < 1.5) return;
+      b.hp = Math.min(b.maxHp, b.hp + M[b.mat].regen * b.maxHp * dt);
+      const fr = b.hp / b.maxHp; b.state = fr > 0.66 ? 0 : fr > 0.33 ? 1 : 2;
+    });
+    // scavengers: fly to the nearest block, chew through it, move on
+    w.foes.forEach(f => {
+      if (!f.alive) return;
+      if (f.flash > 0) f.flash -= dt;
+      if (f.wait > 0) { f.wait -= dt; f.x += Math.cos(f.seed + w.elapsed) * 20 * dt; f.y += Math.sin(f.seed + w.elapsed * 0.7) * 20 * dt; return; }
+      if (!f.prey || !f.prey.alive) { f.prey = nearestBlockTo(f.x, f.y, 3000); f.eat = 0; }
+      const b = f.prey; if (!b) return;
+      const dx = b.x - f.x, dy = b.y - f.y, d = Math.hypot(dx, dy) || 1;
+      f.a = Math.atan2(dy, dx);
+      const sp = 75 * Math.min(1.6, Math.pow(TH.hazard, 0.3));
+      if (d > 26) { f.vx += (dx / d * sp - f.vx) * Math.min(1, dt * 3); f.vy += (dy / d * sp - f.vy) * Math.min(1, dt * 3); }
+      else { f.vx *= 0.8; f.vy *= 0.8; }
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if (d < 30) {
+        b.hp -= b.maxHp / 2.5 * dt; b.flash = 0.05;
+        if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: b.x, y: b.y, vx: rand(-40, 40), vy: rand(-40, 40), t: 0, life: 0.3, color: M[b.mat].color, size: 2 });
+        if (b.hp <= 0) {
+          b.alive = false; w.grid.delete(key(b.gx, b.gy)); w.left--; f.prey = null; f.wait = 0.6;
+          if (w.target === b) w.target = null;
+          if (!w.warned.scav || w.elapsed - w.warned.scav > 6) { w.warned.scav = w.elapsed; caption('A scavenger ate a block - shoot it!', 'warn'); }
+        }
+      }
+    });
   }
 
   // Field cleared before the timer ran out: warp to the next world and keep mining with the time,
@@ -628,6 +856,8 @@ SM.Sortie = (function () {
     const world = generate(next, false);
     Object.assign(w, { region: next, blocks: world.blocks, grid: world.grid, debris: world.debris, fields: world.fields,
       stars: world.stars, relics: world.relics, left: world.blocks.length,
+      wells: world.wells, mines: world.mines, foes: world.foes, regrow: world.regrow, booms: [],
+      flare: next.flares ? next.flares.every * 0.6 : 0, flareOn: 0,
       target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0 });
     const s = w.ship;
     s.x = w.dock.x; s.y = w.dock.y - 30; s.vx = 0; s.vy = 0; s.a = -Math.PI / 2; s.inv = 1.5;
@@ -669,7 +899,7 @@ SM.Sortie = (function () {
       if (label) caption(label + ' -' + Math.round(amount) + ' hull', 'danger');
       w.pops.push({ x: w.ship.x, y: w.ship.y - 20, text: '-' + Math.round(amount) + ' hull', t: 0, color: '#ff6b6b', size: 13 });
     } else if (!w.warned.zap || w.elapsed - w.warned.zap > 1.2) {
-      w.warned.zap = w.elapsed; SM.Audio.damage(); vibrate(40); caption('Electrical field - taking damage', 'danger');
+      w.warned.zap = w.elapsed; SM.Audio.damage(); vibrate(40); caption((label || 'Electrical field') + ' - taking damage', 'danger');
     }
   }
 
@@ -806,7 +1036,11 @@ SM.Sortie = (function () {
     if (d.weapon === 'flak' && d.wcd <= 0) {
       const m = W.weapons.find(x => x.id === 'flak');
       const i = w.debris.findIndex(o => Math.hypot(o.x - s.x, o.y - s.y) < m.range || Math.hypot(o.x - d.x, o.y - d.y) < m.range);
-      if (i >= 0) {
+      const foe = i < 0 && nearestFoe(d.x, d.y, m.range);
+      if (foe) {
+        w.fx.push({ kind: 'beam', x1: d.x, y1: d.y, x2: foe.x, y2: foe.y, t: 0, life: 0.2, color: '#ff9a3c' });
+        SM.Audio.hit(); hurtBlock(foe, 30 * TH.hp); d.wcd = m.cd;
+      } else if (i >= 0) {
         const o = w.debris[i];
         w.fx.push({ kind: 'beam', x1: d.x, y1: d.y, x2: o.x, y2: o.y, t: 0, life: 0.2, color: '#ff9a3c' });
         for (let k = 0; k < 12; k++) w.particles.push({ x: o.x, y: o.y, vx: rand(-140, 140), vy: rand(-140, 140), t: 0, life: 0.5, color: k % 2 ? '#ff6b6b' : '#ffd76a', size: 3 });
@@ -1032,6 +1266,7 @@ SM.Sortie = (function () {
         }
       });
       w.fields.forEach(f => { if (Math.hypot(f.x - s.x, f.y - s.y) < ws.radius + f.r) f.t = 0; });
+      w.mines.forEach(m => { if (m.alive && Math.hypot(m.x - s.x, m.y - s.y) < ws.radius + 20) disarmMine(m); });
       w.fx.push({ kind: 'ring', x: s.x, y: s.y, r: ws.radius, t: 0, life: 0.5, color: def.color });
     }
     hud();
@@ -1153,7 +1388,8 @@ SM.Sortie = (function () {
   function hurtBlock(b, dmg, quiet) {
     if (!b.alive) return;
     const m = M[b.mat];
-    b.hp -= dmg / m.res; b.flash = 0.12;
+    b.hp -= dmg / m.res; b.flash = 0.12; b.hitAt = w.elapsed;
+    if (b.foe) { if (b.hp <= 0) killFoe(b); return; }
     const prev = b.state || 0, frac = b.hp / b.maxHp;
     b.state = frac > 0.66 ? 0 : frac > 0.33 ? 1 : 2;
     if (b.state > prev && !quiet) SM.Audio.crack();
@@ -1172,6 +1408,8 @@ SM.Sortie = (function () {
       if (d <= r + BS / 2) hits.push([b, d]);
     }
     hits.forEach(([b, d]) => hurtBlock(b, dmg * (d < r * 0.5 ? 1 : 0.6))); // full damage in the middle
+    w.foes.forEach(f => { if (f.alive && Math.hypot(f.x - x, f.y - y) < r + 14) hurtBlock(f, dmg); });
+    w.mines.forEach(m => { if (m.alive && m.arm < 0 && Math.hypot(m.x - x, m.y - y) < r + 20) m.arm = 0.25; }); // chain
     const n = settings().reducedFx ? 10 : 34;
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2), sp = rand(60, r * 4);
@@ -1197,7 +1435,7 @@ SM.Sortie = (function () {
       p.x += p.vx * dt; p.y += p.vy * dt;
       const b = w.grid.get(key(Math.floor(p.x / BS), Math.floor(p.y / BS)));
       const out = p.x < 0 || p.y < 0 || p.x > W || p.y > H;
-      const boom = (p.kind === 'missile' && (b || p.t > 3)) || (p.kind === 'grenade' && (p.t >= p.fuse || (b && p.t > 0.15)));
+      const boom = (p.kind === 'missile' && (b || p.t > 3 || (p.target && p.target.foe && Math.hypot(p.target.x - p.x, p.target.y - p.y) < 16))) || (p.kind === 'grenade' && (p.t >= p.fuse || (b && p.t > 0.15)));
       if (boom || out) { if (!out) explode(p.x, p.y, p.r, p.dmg, p.color); return false; }
       return true;
     });
@@ -1217,6 +1455,9 @@ SM.Sortie = (function () {
     w.byMatCr[b.mat] = (w.byMatCr[b.mat] || 0) + b.value;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
     addSalvage(m.xp);
+    if (m.fx === 'fuel') { w.fuel = Math.min(w.S.fuel, w.fuel + w.S.fuel * 0.03); w.pops.push({ x: b.x, y: b.y + 10, text: '+fuel', t: 0, color: '#9fe3ff', size: 11 }); }
+    else if (m.fx === 'energy') { w.energy = w.S.energy; w.heat = Math.max(0, w.heat - w.S.heat * 0.5); w.pops.push({ x: b.x, y: b.y + 10, text: '+energy', t: 0, color: '#c77dff', size: 11 }); }
+    else if (m.fx === 'boom') w.booms.push({ x: b.x, y: b.y, t: 0.18 });
     const st = SM.State.get();
     if (!st.discovered[b.mat]) { st.discovered[b.mat] = true; w.xp += 5; caption('New material discovered: ' + m.name, 'good'); }
     SM.Audio.brk(m.value);
@@ -1266,6 +1507,25 @@ SM.Sortie = (function () {
 
     // dock
     drawDock(w.dock);
+
+    // gravity wells
+    w.wells.forEach(wl => {
+      if (wl.x + wl.r < vx0 || wl.x - wl.r > vx1 || wl.y + wl.r < vy0 || wl.y - wl.r > vy1) return;
+      g.save();
+      const gr = g.createRadialGradient(wl.x, wl.y, 0, wl.x, wl.y, wl.r);
+      gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(0.12, 'rgba(60,20,110,0.55)'); gr.addColorStop(1, 'rgba(60,20,110,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(wl.x, wl.y, wl.r, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(190,140,255,0.35)'; g.lineWidth = 2;
+      for (let i = 0; i < 3; i++) { // rings sliding inward
+        const k = ((wl.t * 0.35 + i / 3) % 1), rr = wl.r * (1 - k);
+        g.globalAlpha = k * 0.8; g.beginPath(); g.arc(wl.x, wl.y, rr, 0, Math.PI * 2); g.stroke();
+      }
+      g.globalAlpha = 1; g.strokeStyle = '#d6b8ff'; g.lineWidth = 2;
+      for (let i = 0; i < 4; i++) { const a = wl.t * 1.6 + i * Math.PI / 2; g.beginPath(); g.arc(wl.x, wl.y, wl.core + 10, a, a + 0.9); g.stroke(); }
+      g.fillStyle = '#000'; g.beginPath(); g.arc(wl.x, wl.y, wl.core, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#ff6b6b'; g.setLineDash([4, 4]); g.beginPath(); g.arc(wl.x, wl.y, wl.core + SHIP_R, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+      g.restore();
+    });
 
     // electrical fields
     w.fields.forEach(f => {
@@ -1339,6 +1599,31 @@ SM.Sortie = (function () {
       }
     }
 
+    // mines
+    w.mines.forEach(m => {
+      if (!m.alive || m.x < vx0 - 30 || m.x > vx1 + 30 || m.y < vy0 - 30 || m.y > vy1 + 30) return;
+      const armed = m.arm >= 0, blink = armed ? Math.floor(m.arm * 12) % 2 === 0 : Math.floor(m.t * 1.5) % 2 === 0;
+      g.save(); g.translate(m.x, m.y); g.rotate(m.t * 0.5);
+      g.strokeStyle = armed ? '#ff4d4d' : '#a35a5a'; g.lineWidth = 2.5;
+      for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.beginPath(); g.moveTo(Math.cos(a) * 8, Math.sin(a) * 8); g.lineTo(Math.cos(a) * 14, Math.sin(a) * 14); g.stroke(); }
+      g.fillStyle = '#3a2626'; g.beginPath(); g.arc(0, 0, 9, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = blink ? '#ff4d4d' : '#552020'; g.beginPath(); g.arc(0, 0, 3.5, 0, Math.PI * 2); g.fill();
+      g.restore();
+      if (armed) { g.strokeStyle = 'rgba(255,77,77,0.5)'; g.setLineDash([5, 5]); g.beginPath(); g.arc(m.x, m.y, 95, 0, Math.PI * 2); g.stroke(); g.setLineDash([]); }
+    });
+    // scavenger drones
+    w.foes.forEach(f => {
+      if (!f.alive || f.x < vx0 - 30 || f.x > vx1 + 30 || f.y < vy0 - 30 || f.y > vy1 + 30) return;
+      g.save(); g.translate(f.x, f.y); g.rotate(f.a);
+      g.fillStyle = f.flash > 0 ? '#fff' : M.scav.color; g.strokeStyle = M.scav.edge; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(13, 0); g.lineTo(-9, -10); g.lineTo(-4, 0); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
+      if (f.prey && Math.hypot(f.prey.x - f.x, f.prey.y - f.y) < 30) { // chewing
+        g.strokeStyle = '#ffd76a'; g.lineWidth = 2; g.beginPath(); g.moveTo(13, 0); g.lineTo(20 + rand(-2, 2), rand(-3, 3)); g.stroke();
+      }
+      g.restore();
+      if (f.hp < f.maxHp) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(f.x - 12, f.y - 20, 24, 4); g.fillStyle = M.scav.color; g.fillRect(f.x - 12, f.y - 20, 24 * Math.max(0, f.hp / f.maxHp), 4); }
+    });
+
     // debris
     w.debris.forEach(d => {
       if (d.x < vx0 - 30 || d.x > vx1 + 30 || d.y < vy0 - 30 || d.y > vy1 + 30) return;
@@ -1389,6 +1674,14 @@ SM.Sortie = (function () {
     });
     g.globalAlpha = 1;
 
+    // nebula fog: only a bubble around the ship (or the miner on a spacewalk) is visible
+    if (w.region.fog) {
+      const fo = w.eva && w.miner ? w.miner : s, R = w.region.fog;
+      const fg = g.createRadialGradient(fo.x, fo.y, R * 0.45, fo.x, fo.y, R);
+      fg.addColorStop(0, 'rgba(14,6,26,0)'); fg.addColorStop(1, 'rgba(14,6,26,0.96)');
+      g.fillStyle = fg; g.fillRect(vx0 - BS, vy0 - BS, vx1 - vx0 + BS * 2, vy1 - vy0 + BS * 2);
+    }
+
     drawWingAndEva();
     drawShip(s);
 
@@ -1402,8 +1695,22 @@ SM.Sortie = (function () {
     });
     g.globalAlpha = 1;
 
-    // off-screen target arrow
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // solar flare: the sky above burns orange; warning pulses before it hits
+    if (w.region.flares) {
+      const F = w.region.flares, on = w.flareOn > 0, warn = !on && w.flare <= F.warn;
+      if (on || warn) {
+        const a = on ? 0.38 : 0.12 + 0.12 * Math.sin(performance.now() / 90);
+        const fl = g.createLinearGradient(0, 0, 0, ch);
+        fl.addColorStop(0, `rgba(255,150,40,${a})`); fl.addColorStop(1, 'rgba(255,150,40,0)');
+        g.fillStyle = fl; g.fillRect(0, 0, cw, ch);
+        const safe = shaded(s.x, s.y);
+        g.font = 'bold 14px system-ui'; g.textAlign = 'center'; g.textBaseline = 'top';
+        g.fillStyle = on ? (safe ? '#57e39a' : '#ff6b6b') : '#ffd76a';
+        g.fillText(on ? (safe ? '\u2600 FLARE - shaded by rock' : '\u2600 FLARE - exposed, get under rock') : '\u2600 Flare incoming', cw / 2, 92);
+      }
+    }
+    // off-screen target arrow
     if (w.target && w.target.alive) {
       const sx = (w.target.x - w.cam.x) * scale + cw / 2, sy = (w.target.y - w.cam.y) * scale + ch / 2;
       if (sx < 0 || sx > cw || sy < 0 || sy > ch) {
@@ -1494,6 +1801,13 @@ SM.Sortie = (function () {
       case 'tri': g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y + r * 0.7); g.lineTo(x - r, y + r * 0.7); g.closePath(); g.fill(); break;
       case 'ring': g.beginPath(); g.arc(x, y, r * 0.8, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(x, y, r * 0.3, 0, Math.PI * 2); g.fill(); break;
       case 'cross': g.beginPath(); g.moveTo(x - r, y - r); g.lineTo(x + r, y + r); g.moveTo(x + r, y - r); g.lineTo(x - r, y + r); g.stroke(); break;
+      case 'wave': g.beginPath(); g.moveTo(x - r, y - 2); g.quadraticCurveTo(x - r / 2, y - r, x, y - 2); g.quadraticCurveTo(x + r / 2, y + r * 0.6, x + r, y - 2); g.stroke(); break;
+      case 'burst': for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; g.beginPath(); g.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r); g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.stroke(); } break;
+      case 'hex': g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; g.lineTo(x + Math.cos(a) * r * 0.85, y + Math.sin(a) * r * 0.85); } g.closePath(); g.stroke(); break;
+      case 'plus': g.fillRect(x - r, y - 1.5, r * 2, 3); g.fillRect(x - 1.5, y - r, 3, r * 2); break;
+      case 'square': g.strokeRect(x - r * 0.7, y - r * 0.7, r * 1.4, r * 1.4); g.fillRect(x - r * 0.25, y - r * 0.25, r * 0.5, r * 0.5); break;
+      case 'coin': g.beginPath(); g.arc(x, y, r * 0.75, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(x - 1, y - r * 0.5, 2, r); break;
+      case 'eye': g.beginPath(); g.ellipse(x, y, r, r * 0.55, 0, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(x, y, r * 0.3, 0, Math.PI * 2); g.fill(); break;
       case 'star':
         g.beginPath();
         for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
