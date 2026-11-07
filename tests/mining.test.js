@@ -35,7 +35,7 @@ function game(seed) {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  for (const file of ['data', 'state', 'sortie']) vm.runInContext(fs.readFileSync(`js/${file}.js`, 'utf8'), sandbox);
+  for (const file of ['data', 'state', 'meta', 'sortie']) vm.runInContext(fs.readFileSync(`js/${file}.js`, 'utf8'), sandbox);
   sandbox.SM.Audio = new Proxy({}, { get: () => () => {} });
   sandbox.SM.State.load();
   sandbox.SM.State.get().settings.autoEva = false; // off by default here so other tests see the ship alone; auto EVA has its own tests
@@ -667,4 +667,83 @@ test('sentries shoot down incoming asteroids and guard the miner on a spacewalk'
   w.sentries.forEach(q => { q.flakCd = 0; });
   advance(0.2);
   assert.notEqual(w.debris[0], rock2, 'asteroid heading for the miner was shot down');
+});
+
+// ---------- retention features (added 2026-11-07) ----------
+function runResult(over) {
+  return Object.assign({ reason: 'return', region: 'nearside', raw: 0, credits: 0, share: 1, byMat: {}, blocks: 0, xp: 0,
+    damaged: false, emergency: false, hullEnd: 100, hullLost: 0, time: 60, cleared: 0, relicCount: 0, giants: 0, foeKills: 0, events: [] }, over || {});
+}
+const DAY_MS = 86400000;
+const NOON = new Date(2026, 10, 4, 12).getTime(); // a Wednesday
+
+test('daily and weekly orders: three each, distinct kinds, weekly asks for more', () => {
+  const { SM } = game(3);
+  const m = SM.State.get().meta;
+  const fresh = SM.Meta.refresh(NOON);
+  assert.deepEqual({ ...fresh }, { daily: true, weekly: true });
+  assert.equal(m.daily.orders.length, 3);
+  assert.equal(m.weekly.orders.length, 3);
+  assert.equal(new Set(m.daily.orders.map(o => o.kind)).size, 3);
+  assert.ok(m.daily.orders.every(o => !['scavs', 'clears', 'giants', 'events'].includes(o.kind)), 'locked kinds stay out for a new player');
+  assert.ok(m.weekly.orders.every(o => o.stars > m.daily.orders[0].stars));
+  assert.deepEqual({ ...SM.Meta.refresh(NOON + 3600000) }, { daily: false, weekly: false }); // same day: same orders
+  assert.equal(SM.Meta.refresh(NOON + DAY_MS).daily, true);
+  assert.equal(SM.Meta.refresh(NOON + DAY_MS).weekly, false);
+  assert.equal(SM.Meta.refresh(NOON + 5 * DAY_MS).weekly, true); // Monday
+});
+
+test('orders fill from sortie results and pay credits, XP and stars once', () => {
+  const { SM } = game(4);
+  const s = SM.State.get(), m = s.meta;
+  SM.Meta.refresh(NOON);
+  m.daily.orders = [{ id: 'a', kind: 'blocks', key: 'blocks', need: 10, start: SM.Meta.counter('blocks'), credits: 100, xp: 5, stars: 1, name: 'Break 10 blocks', done: false }];
+  m.weekly.orders = [{ id: 'b', kind: 'mat', key: 'mat:iron', need: 5, start: 0, credits: 900, xp: 20, stars: 4, name: 'Break 5 Iron', done: false },
+    { id: 'c', kind: 'sorties', key: 'sorties', need: 50, start: 0, credits: 1, xp: 1, stars: 1, name: 'x', done: false }];
+  let r = SM.Meta.onRun(runResult({ blocks: 6, byMat: { iron: 3, rock: 3 } }), NOON);
+  assert.equal(r.orders.length, 0);
+  assert.equal(SM.Meta.progress(m.daily.orders[0]), 6);
+  r = SM.Meta.onRun(runResult({ blocks: 6, byMat: { iron: 3 } }), NOON);
+  const labels = r.orders.map(o => o.label);
+  assert.ok(labels.some(l => l.startsWith('Daily order')));
+  assert.ok(labels.some(l => l.startsWith('All daily orders done')), 'one daily = all dailies here');
+  assert.ok(labels.some(l => l.startsWith('Weekly order')));
+  assert.ok(s.credits >= 100 + 900);
+  assert.equal(m.stars, 1 + SM.DATA.ORDERS.allDailyStars + 4);
+  assert.equal(SM.Meta.onRun(runResult({ blocks: 50 }), NOON).orders.length, 0, 'never paid twice');
+  assert.equal(SM.Meta.counter('sorties'), 3);
+  assert.equal(m.fields.nearside.runs, 3);
+});
+
+test('daily streak grows on consecutive days, resets after a missed day, and raises daily rewards', () => {
+  const { SM } = game(5);
+  const m = SM.State.get().meta;
+  function finishDay(t) {
+    SM.Meta.refresh(t);
+    m.daily.orders.forEach(o => { o.key = 'sorties'; o.start = SM.Meta.counter('sorties'); o.need = 1; });
+    return SM.Meta.onRun(runResult(), t).orders;
+  }
+  finishDay(NOON); assert.equal(SM.Meta.streak(NOON), 1);
+  finishDay(NOON + DAY_MS); assert.equal(SM.Meta.streak(NOON + DAY_MS), 2);
+  const paid = finishDay(NOON + 2 * DAY_MS);
+  assert.equal(SM.Meta.streak(NOON + 2 * DAY_MS), 3);
+  const o = m.daily.orders[0];
+  assert.equal(paid[0].credits, Math.round(o.credits * (1 + 2 * SM.DATA.ORDERS.streakStep)), 'yesterday\'s streak of 2 boosts today');
+  assert.equal(SM.Meta.streak(NOON + 4 * DAY_MS), 0, 'missed a day');
+  finishDay(NOON + 4 * DAY_MS); assert.equal(SM.Meta.streak(NOON + 4 * DAY_MS), 1);
+  assert.equal(m.daily.best, 3);
+});
+
+test('older saves get meta counters seeded from their stats; drone collection counts toward orders', () => {
+  const { SM } = game(6);
+  SM.State.replace({ credits: 10, stats: { sorties: 7, blocks: 300, best: 0, offlineEarned: 50 } });
+  assert.equal(SM.Meta.counter('sorties'), 7);
+  assert.equal(SM.Meta.counter('blocks'), 300);
+  const s = SM.State.get();
+  SM.Meta.refresh();
+  s.meta.daily.orders = [{ id: 'z', kind: 'offline', key: 'offline', need: 20, start: SM.Meta.counter('offline'), credits: 40, xp: 1, stars: 1, name: 'Collect', done: false }];
+  s.drone.store = 25;
+  const r = SM.State.collectDrone();
+  assert.equal(r.credits, 25);
+  assert.ok(r.orders.some(o => o.label.startsWith('Daily order')));
 });

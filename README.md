@@ -20,6 +20,7 @@
 | `index.html` | Page layout: hangar screens, sortie HUD, controls, modals |
 | `css/style.css` | All styling, mobile-first, safe-area aware |
 | `js/data.js` | **All tuning numbers** (materials, regions, upgrade costs, drone rates, base stats). Edit here to rebalance. |
+| `js/meta.js` | Long-term goals: daily / weekly orders, lifetime counters (and later achievements, collection log) |
 | `js/state.js` | Save/load (localStorage), derived stats, purchases, region unlocks, **offline gains**, contracts |
 | `js/sortie.js` | The mining run: world generation (6 layouts), touch stick, laser/heat, debris, field hazards (electrical fields, wind, gravity wells, flares, fog, mines, scavengers), rendering, HUD |
 | `js/ui.js` | Hangar, upgrade bay, fields, contracts, settings, summary and welcome-back screens |
@@ -316,6 +317,16 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - **[TODO]** Dedicated sounds for the miniguns and sentries (they reuse the existing hit and click sounds for now).
 - **[TODO]** The hangar ship preview doesn't show the new parts yet; only the in-sortie ship has gun barrels.
 
+### Daily and weekly orders (added 2026-11-07 at Tim's request)
+
+- **[DONE]** **Contracts** tab now starts with **Orders**: 3 daily orders (new at local midnight) and 3 weekly orders (new on Monday). No accepting: progress counts on every sortie. Hangar card shows "Daily orders 2 / 3 done - streak 3 days - new in 5h".
+- **[DONE]** Order kinds: break N blocks, bank N cr from sorties, break N of a material from your fields, fly N sorties, recover N relics, collect N cr from the drone bay; plus shoot scavengers (once you have a scavenger field), clear a field / crack a giant (once you have done it once), and find a rare event (weekly only). Sizes scale with your best field; weekly = about 6x a daily.
+- **[DONE]** Rewards: credits = `120 x (1 + field tier) x Threat value x kind weight` (weekly x6), XP, and **stars** (1 per daily, 4 per weekly). All three dailies = bonus (one order's credits + 3 stars); all three weeklies = bonus (2x + 10 stars). Stars are for cosmetics.
+- **[DONE]** **Streak:** finishing all three dailies on days in a row raises daily rewards by 10% per day (up to +70%). Missing a day resets it.
+- **[DONE]** Rewards show in the sortie summary (and as a toast when the drone bay finishes one). Lifetime counters behind this (blocks, materials, relics, giants, scavengers, clears, per-field runs/best) are in `s.meta` and also drive achievements and the collection log. Older saves start their counters from the stats they already had.
+- Code: `js/meta.js` (orders, counters), numbers in `DATA.ORDERS` (`js/data.js`). Tests: order generation and reset, payment once, streak, old-save migration.
+- **[NEEDS DECISION]** Reward sizes and the streak bonus are my guesses. Should missing a day keep part of the streak instead of resetting it?
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.
@@ -415,7 +426,7 @@ Players can make an account (email + password), sign in on any phone or computer
 **Contracts**
 - [DONE] Material order, Speed extraction, Safe pilot. Shown with requirements and rewards up front, 3 offers refresh every 4 hours, 1 active slot (2 at Rank 3). Unlocked after the first sortie.
 - [TODO] Survey run and Discovery contracts (need scan targets / rare formations).
-- [TODO] Daily objectives.
+- [DONE] Daily objectives: daily and weekly orders with a streak (see *Daily and weekly orders*).
 
 **Screens, audio, accessibility, saves**
 - [DONE] Hangar, Upgrades (Shuttle / Miner / Drone tabs), Fields, Contracts, Settings, Sortie HUD, Sortie summary, Welcome back.

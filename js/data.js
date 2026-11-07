@@ -348,6 +348,29 @@ SM.DATA = (function () {
   //   it is banked safely (an emergency return never cuts it), adds `time` seconds to the clock, and refills `fuel` of the tank.
   const CLEAR = { pct: 1.0, perSec: 0.01, streak: 0.5, regionBonus: 0.5, time: 45, fuel: 0.5, xp: 40 };
 
+  // Daily and weekly orders (added 2026-11-07 at Tim's request). Three daily orders reset at local midnight, three weekly
+  // orders reset on Monday. Progress counts across every sortie (no need to accept them). Each order pays credits, XP and
+  // stars (stars buy cosmetics). Doing all three dailies pays a bonus and extends the streak: +streakStep per day in a row,
+  // up to streakMax days. Sizes and rewards scale with your best unlocked field (tier 0-12) and Threat value.
+  //   credits per order = base x (1 + tier) x Threat value x reward weight of that kind   (weekly x weeklyMult)
+  const ORDERS = {
+    base: 120, weeklyMult: 6, weeklyNeed: 6, xp: 15, stars: 1, weeklyStars: 4,
+    allDailyStars: 3, allDailyCredits: 1, allWeeklyStars: 10, allWeeklyCredits: 2, // "all done" bonus: stars + x one order's credits
+    streakStep: 0.1, streakMax: 7,
+    kinds: {
+      blocks:   { w: 1,   name: 'Break {n} blocks' },
+      credits:  { w: 1.2, name: 'Bank {n} cr from sorties' },
+      mat:      { w: 1,   name: 'Break {n} {mat}' },
+      sorties:  { w: 0.8, name: 'Fly {n} sorties', n: 3 },
+      relics:   { w: 1.1, name: 'Recover {n} relics', n: 3 },
+      scavs:    { w: 1.1, name: 'Shoot down {n} scavengers', n: 4, needs: 'scavs' },
+      clears:   { w: 1.5, name: 'Clear {n} field', n: 1, needs: 'clears' },
+      giants:   { w: 1.6, name: 'Crack {n} giant rock', n: 1, needs: 'giants' },
+      offline:  { w: 0.8, name: 'Collect {n} cr from the drone bay' },
+      events:   { w: 2,   name: 'Find {n} rare event', n: 1, weeklyOnly: true, needs: 'events' },
+    },
+  };
+
   // No level caps. Each table above lists the first prices; after the table runs out,
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
@@ -369,5 +392,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

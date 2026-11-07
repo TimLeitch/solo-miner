@@ -7,6 +7,15 @@ SM.State = (function () {
   const VERSION = 1;
   const CONTRACT_REFRESH_MS = 4 * 60 * 60 * 1000; // offers refresh every 4 hours
 
+  // Long-term goals (js/meta.js): lifetime counters, materials broken, per-field records, daily / weekly orders, stars.
+  function freshMeta() {
+    return {
+      counters: {}, mats: {}, fields: {}, stars: 0,
+      daily: { day: '', orders: [], bonus: false, streak: 0, lastFull: '', best: 0 },
+      weekly: { week: '', orders: [], bonus: false },
+    };
+  }
+
   function fresh() {
     const lv = {};
     D.SHUTTLE.forEach(u => (lv[u.id] = 1));
@@ -29,6 +38,7 @@ SM.State = (function () {
       auto: { lv: {}, on: {} },                // ship automation modules: id -> level, id -> switched on
       wing: { count: 0, drones: [] },          // escort drones and their loadouts
       tutorial: true,
+      meta: freshMeta(),
       lastSeen: Date.now(),
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
       settings: {
@@ -65,6 +75,15 @@ SM.State = (function () {
     }
     s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
     s.auto = Object.assign({ lv: {}, on: {} }, parsed.auto || {}); // older saves: nothing bought
+    const pm = parsed.meta || {}, fm = freshMeta();
+    s.meta = Object.assign(fm, pm);
+    ['counters', 'mats', 'fields'].forEach(k => (s.meta[k] = Object.assign({}, pm[k] || {})));
+    s.meta.daily = Object.assign(freshMeta().daily, pm.daily || {});
+    s.meta.weekly = Object.assign(freshMeta().weekly, pm.weekly || {});
+    if (!parsed.meta) { // older saves: seed lifetime counters from the stats we already kept
+      s.meta.counters.sorties = s.stats.sorties || 0; s.meta.counters.blocks = s.stats.blocks || 0;
+      s.meta.counters.offline = s.stats.offlineEarned || 0; s.meta.counters.contracts = s.contracts.done || 0;
+    }
     if (!parsed.drone) s.drone = { store: 0, tick: parsed.lastSeen || Date.now() }; // migrate v1 saves
     return s;
   }
@@ -437,9 +456,10 @@ SM.State = (function () {
     s.drone.store -= amt;
     earn(amt);
     s.stats.offlineEarned += amt;
+    const orders = SM.Meta ? SM.Meta.track('offline', amt) : [];
     const unlocked = checkUnlocks();
     save();
-    return { credits: amt, unlocked };
+    return { credits: amt, unlocked, orders };
   }
   // On launch / return to the tab: how long were we gone and how much did the drone add meanwhile?
   function collectOffline(now) {
@@ -517,6 +537,7 @@ SM.State = (function () {
     done.forEach(c => {
       c.paid = Math.round(c.reward * mult);
       earn(c.paid); s.xp += c.xp; s.contracts.done++;
+      if (SM.Meta) SM.Meta.add('contracts', 1);
     });
     s.contracts.active = s.contracts.active.filter(c => !done.includes(c));
     return done;

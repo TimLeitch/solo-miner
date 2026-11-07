@@ -43,6 +43,7 @@ SM.UI = (function () {
       SM.Audio.unlock();
       const r = St.collectDrone();
       if (r.credits > 0) { SM.Audio.buy(); toast(`+${fmt(r.credits)} cr from the drone`); }
+      (r.orders || []).forEach(o => toast(`${o.label} +${fmt(o.credits)} cr`));
       r.unlocked.forEach(x => toast(`New field unlocked: ${x.name}!`));
       closeModal(); render();
     });
@@ -140,6 +141,12 @@ SM.UI = (function () {
     $('homeRegion').textContent = r.name;
     const th = St.threat();
     $('homeRegionInfo').textContent = `Hazard: ${r.hazard} - Threat ${th.level.toFixed(1)} (blocks x${th.hp.toFixed(1)} health, x${th.value.toFixed(1)} credits)`;
+    // daily / weekly orders
+    SM.Meta.refresh();
+    const dly = s.meta.daily, dn = dly.orders.filter(o => o.done).length, stk = SM.Meta.streak();
+    $('homeOrders').innerHTML = `<div class="row"><div><div class="label">Daily orders</div>
+      <div class="small"><b>${dn} / ${dly.orders.length}</b> done${stk ? ` - streak <b>${stk}</b> day${stk === 1 ? '' : 's'} (+${Math.round((SM.Meta.streakMult() - 1) * 100)}% rewards)` : ''} - new in ${dur(SM.Meta.nextMidnight() - Date.now())}</div></div>
+      <button class="btn ghost small-btn" data-goto="contracts">View</button></div>`;
     // contract
     const hc = $('homeContract');
     if (s.contracts.active.length) {
@@ -489,6 +496,29 @@ SM.UI = (function () {
     }));
   }
 
+  // ---------- daily / weekly orders (js/meta.js) ----------
+  function orderHtml(o, mult) {
+    const have = SM.Meta.progress(o);
+    return `<div class="contract order ${o.done ? 'done' : ''}" style="margin-top:6px">
+      <div class="row"><b>${o.done ? '&#10003; ' : ''}${esc(o.name)}</b><span class="coin" style="font-weight:800">${fmt(Math.round(o.credits * (mult || 1)))} cr</span></div>
+      <div class="prog"><i style="width:${Math.min(100, have / o.need * 100)}%"></i></div>
+      <div class="small">${fmt(have)} / ${fmt(o.need)} <span class="muted">+${o.xp} XP, +${o.stars} &#9733;</span></div>
+    </div>`;
+  }
+  function renderOrders() {
+    const s = St.get(), m = s.meta, O = D.ORDERS;
+    SM.Meta.refresh();
+    const stk = SM.Meta.streak(), sm = SM.Meta.streakMult();
+    const dAll = m.daily.orders.every(o => o.done), wAll = m.weekly.orders.every(o => o.done);
+    $('orderList').innerHTML = `<div class="small muted">Progress counts on every sortie - no need to accept. Stars: <b>${fmt(m.stars)} &#9733;</b></div>
+      <div class="card"><div class="row"><b>Daily orders</b><span class="small muted">new in ${dur(SM.Meta.nextMidnight() - Date.now())}</span></div>
+        <div class="small">${stk ? `Streak: <b>${stk}</b> day${stk === 1 ? '' : 's'} in a row (+${Math.round((sm - 1) * 100)}% daily rewards). ` : ''}Finish all three for a bonus (+${O.allDailyStars} &#9733;)${dAll ? ' - <b class="pos">done today!</b>' : ''}. Each day in a row adds ${Math.round(O.streakStep * 100)}% (up to ${O.streakMax} days).</div>
+        ${m.daily.orders.map(o => orderHtml(o, sm)).join('')}</div>
+      <div class="card"><div class="row"><b>Weekly orders</b><span class="small muted">new in ${dur(SM.Meta.nextMonday() - Date.now())}</span></div>
+        <div class="small">Finish all three for +${O.allWeeklyStars} &#9733;${wAll ? ' - <b class="pos">done this week!</b>' : ''}</div>
+        ${m.weekly.orders.map(o => orderHtml(o)).join('')}</div>`;
+  }
+
   // ---------- contracts ----------
   function contractHtml(c, offer) {
     const reg = D.REGIONS.find(r => r.id === c.region);
@@ -504,6 +534,7 @@ SM.UI = (function () {
   }
   function renderContracts() {
     const s = St.get();
+    renderOrders();
     if (s.stats.sorties < 1) {
       $('contractInfo').textContent = 'Contracts open up after your first sortie.';
       $('contractActive').innerHTML = ''; $('contractOffers').innerHTML = '';
@@ -556,7 +587,8 @@ SM.UI = (function () {
     if (res.emergency) rows += `<div class="sum"><span>Emergency loss (kept ${Math.round(res.share * 100)}%)</span><span class="neg">-${fmt(res.raw - res.credits)}</span></div>`;
     (extra.contracts || []).forEach(c => (rows += `<div class="sum"><span>Contract: ${esc(c.title)}</span><span class="pos">+${fmt(c.paid)}</span></div>`));
     (extra.bonuses || []).forEach(b => (rows += `<div class="sum"><span>${esc(b.label)}</span><span class="pos">+${fmt(b.amount)}</span></div>`));
-    const total = res.credits + (extra.contracts || []).reduce((a, c) => a + c.paid, 0) + (extra.bonuses || []).reduce((a, b) => a + b.amount, 0);
+    (extra.orders || []).forEach(o => (rows += `<div class="sum"><span>${esc(o.label)}${o.stars ? ` <span class="small">+${o.stars} &#9733;</span>` : ''}</span><span class="pos">+${fmt(o.credits)}</span></div>`));
+    const total = res.credits + (extra.contracts || []).reduce((a, c) => a + c.paid, 0) + (extra.bonuses || []).reduce((a, b) => a + b.amount, 0) + (extra.orders || []).reduce((a, o) => a + o.credits, 0);
     rows += `<div class="sum total"><span>Total banked</span><span>+${fmt(total)} cr</span></div>`;
     const repair = St.repairCost();
     const notes = [];

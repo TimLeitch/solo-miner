@@ -256,3 +256,6 @@ body.in-sortie #hangar { display: none; }
 .acct-msg.pos { color: var(--good); }
 .acct-msg.neg { color: var(--danger); }
 .modal .card .btn { margin-top: 8px; }
+/* daily / weekly orders */
+.order.done { opacity: .72; }
+.order.done .prog i { background: var(--good, #57e39a); }

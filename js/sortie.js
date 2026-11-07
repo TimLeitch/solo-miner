@@ -369,7 +369,7 @@ SM.Sortie = (function () {
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
       cleared: w.cleared, surveyed: Object.keys(w.surveyed), endRegion: w.region.id,
-      giants: w.giantsCracked, giantCr: w.giantCr,
+      giants: w.giantsCracked, giantCr: w.giantCr, foeKills: w.foeKills,
     };
     w = null;
     cb.onEnd && cb.onEnd(result);

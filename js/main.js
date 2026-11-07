@@ -19,6 +19,7 @@ SM.Main = (function () {
         blocks: p.blocks, xp: p.xp, damaged: p.damaged, emergency: false, hullEnd: p.hull, hullLost: 0, time: 0 });
     }
     St.refreshContracts(false);
+    SM.Meta.refresh();
     St.save();
     SM.UI.goto('home');
     SM.Cloud.init(); // signs back in from the stored session and syncs in the background (never blocks play)
@@ -94,6 +95,7 @@ SM.Main = (function () {
       St.earn(r.bonus);
     });
     const contracts = St.applyContracts(res);
+    const meta = SM.Meta.onRun(res); // lifetime counters + daily / weekly orders
     if (res.wasTutorial) s.tutorial = false;
     if (s.stats.sorties === 1) St.refreshContracts(true);
     const unlocked = St.checkUnlocks();
@@ -104,12 +106,12 @@ SM.Main = (function () {
       St.repair();
       if (s.hull > hullBefore) autoRepair = { pts: Math.round(s.hull - hullBefore), cost: before - s.credits };
     }
-    s.lastRun = { region: res.region, blocks: res.blocks, credits: res.credits + contracts.reduce((a, c) => a + c.paid, 0) + bonuses.reduce((a, b) => a + b.amount, 0) };
+    s.lastRun = { region: res.region, blocks: res.blocks, credits: res.credits + contracts.reduce((a, c) => a + c.paid, 0) + bonuses.reduce((a, b) => a + b.amount, 0) + meta.orders.reduce((a, o) => a + o.credits, 0) };
     St.save();
     if (contracts.length) SM.Audio.contract();
     const rankAfter = St.rank();
     SM.UI.goto('home');
-    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0, autoRepair });
+    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0, autoRepair, orders: meta.orders });
     SM.Cloud.sync();
   }
 
