@@ -780,3 +780,22 @@ test('rebirth: needs lifetime credits, resets the ship, keeps rank and stars, an
   SM.State.replace(SM.State.exportSave());
   assert.equal(SM.State.get().prestige.shards, 2);
 });
+
+test('achievements unlock once from lifetime counters, rank and fields, and pay stars', () => {
+  const { SM } = game(12);
+  const s = SM.State.get();
+  assert.equal(SM.Meta.checkAchievements().length, 0, 'a new player has nothing yet');
+  const r = SM.Meta.onRun(runResult({ blocks: 120, giants: 1, cleared: 1 }));
+  const ids = [...r.achievements.map(a => a.id)].sort();
+  assert.deepEqual(ids, ['blocks.1', 'clears.1', 'giants.1']);
+  assert.equal(s.meta.stars, 3 * SM.DATA.STARS_BY_RUNG[0] + r.orders.reduce((a, o) => a + o.stars, 0));
+  assert.equal(SM.Meta.checkAchievements().length, 0, 'never twice');
+  s.xp = SM.State.rankXp(10); s.unlocked.push('comet', 'redshard');
+  const more = [...SM.Meta.checkAchievements().map(a => a.id)].sort();
+  assert.deepEqual(more, ['fields.1', 'rank.1', 'rank.2']);
+  assert.equal(SM.Meta.unseenAchievements(), 6);
+  SM.Meta.seeAchievements();
+  assert.equal(SM.Meta.unseenAchievements(), 0);
+  const all = SM.Meta.achievements();
+  assert.ok(all.length > 40 && all.every(a => a.goal > 0 && a.stars > 0));
+});

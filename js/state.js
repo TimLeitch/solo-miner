@@ -10,7 +10,7 @@ SM.State = (function () {
   // Long-term goals (js/meta.js): lifetime counters, materials broken, per-field records, daily / weekly orders, stars.
   function freshMeta() {
     return {
-      counters: {}, mats: {}, fields: {}, stars: 0,
+      counters: {}, mats: {}, fields: {}, stars: 0, ach: {}, achSeen: 0,
       daily: { day: '', orders: [], bonus: false, streak: 0, lastFull: '', best: 0 },
       weekly: { week: '', orders: [], bonus: false },
     };
@@ -79,7 +79,7 @@ SM.State = (function () {
     s.prestige = Object.assign({ shards: 0, count: 0, allTime: 0, best: 0 }, parsed.prestige || {});
     const pm = parsed.meta || {}, fm = freshMeta();
     s.meta = Object.assign(fm, pm);
-    ['counters', 'mats', 'fields'].forEach(k => (s.meta[k] = Object.assign({}, pm[k] || {})));
+    ['counters', 'mats', 'fields', 'ach'].forEach(k => (s.meta[k] = Object.assign({}, pm[k] || {})));
     s.meta.daily = Object.assign(freshMeta().daily, pm.daily || {});
     s.meta.weekly = Object.assign(freshMeta().weekly, pm.weekly || {});
     if (!parsed.meta) { // older saves: seed lifetime counters from the stats we already kept

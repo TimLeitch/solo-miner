@@ -335,6 +335,14 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - **[DONE]** Confirmation dialog shows the gain; a gold dot on Career when your first rebirth is available. Tunables in `DATA.PRESTIGE`. Test: reset/keep lists, +20% block values and drone rate after 2 shards, save round trip.
 - **[NEEDS DECISION]** Keeping **rank** across rebirths (rank adds laser power, so the second life starts a bit stronger). Reset rank too? And is 25k the right first rebirth point (about when Scrapyard / Glass Moon open)?
 
+### Achievements and collection log (added 2026-11-07 at Tim's request)
+
+- **[DONE]** **Career > Awards**: 16 achievement ladders, 49 rungs in all (e.g. Rock breaker I-IV: break 100 / 1k / 10k / 100k blocks; Prospector: earn 10k ... 10M cr over all lives; Giant slayer, Pest control, Clean sweep, Contractor, Daily grind, Clockwork (daily streak), Veteran (rank), Explorer (fields), Geologist (materials), Idle tycoon (drone bay), Born again (rebirths)). Each rung pays stars: 2 / 5 / 10 / 20 by rung. Shows the next rung of each ladder with a progress bar, plus the latest ones earned.
+- **[DONE]** New achievements appear in the sortie summary, as a toast in the hangar (drone bay, rebirth, auto upgrade), and put a gold dot on the Career tab until you look.
+- **[DONE]** **Career > Log** (collection log): all 14 materials (count broken, or ??? until found), every field (runs, best sortie, times cleared, ??? while locked), and lifetime records (sorties, blocks, credits, relics, giants, scavengers, contracts, orders, streak, drone bay, rebirths).
+- Ladders and goals are in `DATA.ACHIEVEMENTS` / `DATA.STARS_BY_RUNG`; code in `js/meta.js`. Achievements are earned once and survive a rebirth. Test: unlock from counters, rank and fields, paid once, unseen dot count.
+- **[NEEDS DECISION]** Should achievements also pay credits, or only stars (as now)?
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.

@@ -130,6 +130,43 @@ SM.Meta = (function () {
     return paid;
   }
 
+  // ---------- achievements (DATA.ACHIEVEMENTS) ----------
+  function achValue(what) {
+    const s = St.get();
+    if (what === 'allTime') return St.allTimeCredits();
+    if (what === 'rank') return St.rank();
+    if (what === 'fields') return s.unlocked.length;
+    if (what === 'streak') return Math.max(meta().daily.best || 0, streak());
+    if (what === 'mats') return Object.keys(s.discovered).filter(m => D.MATERIALS[m] && !D.MATERIALS[m].foe).length;
+    if (what === 'shards') return s.prestige.shards;
+    return counter(what);
+  }
+  // Every rung of every ladder: { id, ladder, name, text, goal, stars, have, done, at }
+  function achievements() {
+    const got = meta().ach;
+    const out = [];
+    D.ACHIEVEMENTS.forEach(([id, name, what, goals, text]) => {
+      const have = achValue(what);
+      goals.forEach((goal, i) => {
+        const aid = `${id}.${i + 1}`;
+        out.push({ id: aid, ladder: id, rung: i + 1, rungs: goals.length, name: goals.length > 1 ? `${name} ${['I', 'II', 'III', 'IV', 'V'][i]}` : name,
+          text: text.replace('{n}', goal.toLocaleString()), goal, stars: D.STARS_BY_RUNG[i] || 20, have, done: !!got[aid], at: got[aid] || 0 });
+      });
+    });
+    return out;
+  }
+  // Unlock everything newly reached and pay its stars. Returns the new ones.
+  function checkAchievements() {
+    const got = meta().ach, fresh = [];
+    achievements().forEach(a => {
+      if (a.done || a.have < a.goal) return;
+      got[a.id] = Date.now(); meta().stars += a.stars; fresh.push(a);
+    });
+    return fresh;
+  }
+  function unseenAchievements() { return Math.max(0, Object.keys(meta().ach).length - (meta().achSeen || 0)); }
+  function seeAchievements() { meta().achSeen = Object.keys(meta().ach).length; }
+
   // ---------- hooks ----------
   // After a sortie (main.js finishRun). res = the sortie result from SM.Sortie.end().
   function onRun(res, now) {
@@ -146,10 +183,11 @@ SM.Meta = (function () {
     const f = meta().fields, r = res.region;
     f[r] = f[r] || { runs: 0, best: 0, cleared: 0 };
     f[r].runs++; f[r].best = Math.max(f[r].best, res.credits || 0); f[r].cleared += res.cleared || 0;
-    return { orders: checkOrders(now) };
+    const orders = checkOrders(now);
+    return { orders, achievements: checkAchievements() };
   }
   // Something counted outside a sortie (drone bay collection, contract completed). Returns paid orders.
   function track(key, n, now) { add(key, n); return checkOrders(now); }
 
-  return { counter, add, dayKey, weekKey, nextMidnight, nextMonday, refresh, progress, streak, streakMult, checkOrders, onRun, track, tier };
+  return { achievements, checkAchievements, unseenAchievements, seeAchievements, achValue, counter, add, dayKey, weekKey, nextMidnight, nextMonday, refresh, progress, streak, streakMult, checkOrders, onRun, track, tier };
 })();

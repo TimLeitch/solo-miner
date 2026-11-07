@@ -259,3 +259,12 @@ body.in-sortie #hangar { display: none; }
 /* daily / weekly orders */
 .order.done { opacity: .72; }
 .order.done .prog i { background: var(--good, #57e39a); }
+/* career: achievements, collection log */
+.ach .prog, .coll-grid + .prog { height: 8px; background: #0007; border-radius: 5px; overflow: hidden; margin: 8px 0 4px; }
+.ach .prog i { display: block; height: 100%; background: var(--gold); }
+.ach.done { opacity: .75; } .ach.done .prog i { background: var(--good); }
+.coll-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.coll { display: flex; gap: 8px; align-items: center; font-size: .9em; }
+.coll .sw { width: 22px; height: 22px; border-radius: 5px; border: 2px solid; flex: none; }
+.coll.locked { opacity: .55; }
+#careerSeg button { padding: 10px 4px; font-size: .9em; }

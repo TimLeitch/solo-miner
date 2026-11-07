@@ -371,6 +371,31 @@ SM.DATA = (function () {
     },
   };
 
+  // Achievements (added 2026-11-07 at Tim's request). Each line is one ladder: [id, name, what is counted, goals, text].
+  // A rung unlocks once the count reaches its goal and pays STARS_BY_RUNG[rung] stars (stars buy cosmetics).
+  // Counts: lifetime counters in s.meta.counters (blocks, sorties, relics, giants, scavs, clears, contracts, dailies,
+  // weeklies, rebirths, offline, events) or one of: allTime (credits ever, all lives), rank, fields (unlocked now),
+  // streak (best daily streak), mats (materials discovered), shards.
+  const ACHIEVEMENTS = [
+    ['blocks',   'Rock breaker',    'blocks',    [100, 1000, 10000, 100000], 'Break {n} blocks'],
+    ['earner',   'Prospector',      'allTime',   [10000, 100000, 1000000, 10000000], 'Earn {n} cr in total'],
+    ['sorties',  'Frequent flyer',  'sorties',   [10, 100, 500], 'Fly {n} sorties'],
+    ['relics',   'Relic hunter',    'relics',    [10, 100, 500], 'Recover {n} relics'],
+    ['giants',   'Giant slayer',    'giants',    [1, 10, 50], 'Crack {n} giant rocks'],
+    ['scavs',    'Pest control',    'scavs',     [10, 100, 500], 'Shoot down {n} scavengers'],
+    ['clears',   'Clean sweep',     'clears',    [1, 10, 100], 'Clear {n} fields'],
+    ['contracts','Contractor',      'contracts', [5, 50, 250], 'Complete {n} contracts'],
+    ['dailies',  'Daily grind',     'dailies',   [10, 100, 500], 'Complete {n} daily orders'],
+    ['weeklies', 'Week in, week out','weeklies', [5, 50], 'Complete {n} weekly orders'],
+    ['streak',   'Clockwork',       'streak',    [3, 7, 30], 'Finish all dailies {n} days in a row'],
+    ['rank',     'Veteran',         'rank',      [5, 10, 25, 50], 'Reach rank {n}'],
+    ['fields',   'Explorer',        'fields',    [3, 7, 13], 'Unlock {n} fields'],
+    ['mats',     'Geologist',       'mats',      [7, 14], 'Discover {n} materials'],
+    ['offline',  'Idle tycoon',     'offline',   [10000, 100000, 1000000], 'Collect {n} cr from the drone bay'],
+    ['rebirths', 'Born again',      'rebirths',  [1, 5, 10], 'Rebirth {n} times'],
+  ];
+  const STARS_BY_RUNG = [2, 5, 10, 20];
+
   // Rebirth (prestige, added 2026-11-07 at Tim's request). Once lifetime credits reach minLifetime you can start over:
   // upgrades, fields, wallet, escort drones, weapons and modules reset; rank, stars, orders, achievements, cosmetics and
   // settings stay. You gain core shards = floor(sqrt(lifetime credits this life / base)) and every shard you own adds
@@ -399,5 +424,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

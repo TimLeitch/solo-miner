@@ -56,6 +56,8 @@ SM.UI = (function () {
         if (open) $('droneCard').querySelector('details').open = true;
       }
       runAutoUpgrade();
+      const newAch = SM.Meta.checkAchievements(); // anything reached outside a sortie (drone bay, rebirth, auto upgrade...)
+      if (newAch.length) { SM.Audio.contract(); newAch.forEach(a => toast(`Achievement: ${a.name} +${a.stars} \u2605`)); St.save(); render(); }
       $('upDot').hidden = !affordableAny();
     }, 1000);
     $('modal').addEventListener('click', e => { if (e.target.id === 'modal' && !$('modal').dataset.locked) closeModal(); });
@@ -81,16 +83,58 @@ SM.UI = (function () {
   }
 
   // ---------- career (rebirth, achievements, collection, cosmetics, leaderboards) ----------
-  let cseg = 'rebirth';
-  const CAREER_SEGS = [['rebirth', 'Rebirth']];
-  function careerDot() { return St.canRebirth() && !St.get().prestige.count; }
+  let cseg = 'achievements';
+  const CAREER_SEGS = [['achievements', 'Awards'], ['collection', 'Log'], ['rebirth', 'Rebirth']];
+  function careerDot() { return SM.Meta.unseenAchievements() > 0 || (St.canRebirth() && !St.get().prestige.count); }
   function renderCareer() {
     $('careerSeg').innerHTML = CAREER_SEGS.map(([id, n]) => `<button data-cseg="${id}" class="${cseg === id ? 'on' : ''}">${n}</button>`).join('');
     $('careerSeg').hidden = CAREER_SEGS.length < 2;
     $('careerSeg').querySelectorAll('[data-cseg]').forEach(b => b.addEventListener('click', () => { cseg = b.dataset.cseg; SM.Audio.click(); renderCareer(); }));
-    const fn = { rebirth: renderRebirth }[cseg];
+    const fn = { rebirth: renderRebirth, achievements: renderAchievements, collection: renderCollection }[cseg];
     $('careerBody').innerHTML = '';
     fn && fn($('careerBody'));
+  }
+  function renderAchievements(el) {
+    const all = SM.Meta.achievements(), done = all.filter(a => a.done).length;
+    const newSince = SM.Meta.unseenAchievements();
+    // one row per ladder: the next rung to earn (or the top rung once all are done)
+    const ladders = [...new Set(all.map(a => a.ladder))].map(id => {
+      const rungs = all.filter(a => a.ladder === id);
+      return rungs.find(a => !a.done) || rungs[rungs.length - 1];
+    });
+    const recent = all.filter(a => a.done).sort((x, y) => y.at - x.at).slice(0, Math.max(3, newSince));
+    el.innerHTML = `<h2>Achievements</h2>
+      <div class="small muted">${done} / ${all.length} earned - ${fmt(St.get().meta.stars)} &#9733; stars to spend on cosmetics.</div>
+      ${recent.length ? `<div class="card"><div class="label">Latest</div>${recent.map(a => `<div class="sum"><span>&#127942; ${esc(a.name)}</span><span class="small">+${a.stars} &#9733;</span></div>`).join('')}</div>` : ''}
+      ${ladders.map(a => `<div class="card ach ${a.done ? 'done' : ''}">
+        <div class="row"><b>${a.done ? '&#10003; ' : ''}${esc(a.name)}</b><span class="small">+${a.stars} &#9733;</span></div>
+        <div class="small muted">${esc(a.text)} - rung ${a.rung} of ${a.rungs}</div>
+        <div class="prog"><i style="width:${Math.min(100, a.have / a.goal * 100)}%"></i></div>
+        <div class="small">${fmt(Math.min(a.have, a.goal))} / ${fmt(a.goal)}</div></div>`).join('')}`;
+    SM.Meta.seeAchievements(); St.save();
+    $('crDot').hidden = !careerDot();
+  }
+  function renderCollection(el) {
+    const s = St.get(), m = s.meta, C = m.counters;
+    const mats = Object.keys(D.MATERIALS).filter(k => !D.MATERIALS[k].foe);
+    const found = mats.filter(k => s.discovered[k]).length;
+    const matHtml = mats.map(k => {
+      const md = D.MATERIALS[k], got = s.discovered[k];
+      return `<div class="coll ${got ? '' : 'locked'}"><span class="sw" style="background:${got ? md.color : '#333'};border-color:${got ? md.edge : '#555'}"></span>
+        <span><b>${got ? esc(md.name) : '???'}</b><br><span class="small muted">${got ? `${fmt(m.mats[k] || 0)} broken - ${md.value} cr base` : 'Not found yet'}</span></span></div>`;
+    }).join('');
+    const fieldHtml = D.REGIONS.map(r => {
+      const f = m.fields[r.id], open = s.unlocked.includes(r.id);
+      return `<div class="sum"><span>${open || f ? esc(r.name) : '??? (locked)'}</span><span class="small">${f ? `${f.runs} run${f.runs === 1 ? '' : 's'} - best ${fmt(f.best)} cr${f.cleared ? ` - cleared ${f.cleared}x` : ''}` : open ? 'not flown yet' : ''}</span></div>`;
+    }).join('');
+    const rec = [['Sorties flown', C.sorties], ['Blocks broken', C.blocks], ['Credits banked from sorties', C.credits], ['Credits ever (all lives)', St.allTimeCredits()],
+      ['Best sortie', s.stats.best], ['Relics recovered', C.relics], ['Giant rocks cracked', C.giants], ['Scavengers shot down', C.scavs], ['Fields cleared', C.clears],
+      ['Contracts done', C.contracts], ['Daily orders done', C.dailies], ['Weekly orders done', C.weeklies], ['Best daily streak', m.daily.best],
+      ['Drone bay collected', C.offline], ['Rebirths', s.prestige.count]];
+    el.innerHTML = `<h2>Collection log</h2>
+      <div class="card"><div class="label">Materials - ${found} / ${mats.length} found</div><div class="coll-grid">${matHtml}</div></div>
+      <div class="card"><div class="label">Fields</div>${fieldHtml}</div>
+      <div class="card"><div class="label">Records</div>${rec.map(([n, v]) => `<div class="sum"><span>${n}</span><b>${fmt(v || 0)}</b></div>`).join('')}</div>`;
   }
   function renderRebirth(el) {
     const s = St.get(), P = s.prestige, PD = D.PRESTIGE;
@@ -646,6 +690,7 @@ SM.UI = (function () {
     if (res.hullLost > 0) notes.push(`Hull damage: -${res.hullLost}. Repair quote: <b>${fmt(repair)} cr</b>.`);
     if (extra.rankUp) notes.push(`<b class="pos">Rank up! You are now Rank ${extra.rankUp}, with +${Math.round((extra.rankUp - 1) * D.RANK_POWER * 100)}% laser and drill power.</b>`);
     (extra.unlocked || []).forEach(r => notes.push(`<b class="pos">New field unlocked: ${esc(r.name)}!</b>`));
+    (extra.achievements || []).forEach(a => notes.push(`<b class="pos">&#127942; Achievement: ${esc(a.name)}</b> - ${esc(a.text)} (+${a.stars} &#9733;)`));
     const rec = recommended();
     if (rec) notes.push(`You can afford: <b>${esc(rec.name)}</b> ${esc(rec.why)}`);
     openModal(`<h2>Sortie summary</h2>

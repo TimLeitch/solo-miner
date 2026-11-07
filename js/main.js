@@ -99,6 +99,7 @@ SM.Main = (function () {
     if (res.wasTutorial) s.tutorial = false;
     if (s.stats.sorties === 1) St.refreshContracts(true);
     const unlocked = St.checkUnlocks();
+    meta.achievements.push(...SM.Meta.checkAchievements()); // new fields / rank ups
     // Dock repair crew: patch the hull now with whatever is in the wallet
     let autoRepair = null;
     if (St.autoOn('dockfix') && St.repairCost() > 0 && s.credits > 0) {
@@ -111,7 +112,7 @@ SM.Main = (function () {
     if (contracts.length) SM.Audio.contract();
     const rankAfter = St.rank();
     SM.UI.goto('home');
-    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0, autoRepair, orders: meta.orders });
+    SM.UI.showSummary(res, { contracts, bonuses, unlocked, rankUp: rankAfter > rankBefore ? rankAfter : 0, autoRepair, orders: meta.orders, achievements: meta.achievements });
     SM.Cloud.sync();
   }
 
