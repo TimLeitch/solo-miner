@@ -153,6 +153,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 - **[DONE]** **Relics:** 4 glowing pickups per field, only collectable on foot. They're worth 60 / 140 / 240 / 380 cr (±30%) by field, plus 10 XP each, and are listed in the summary.
 - **[DONE]** **Oxygen** (30 s base) is shown as an O2 bar. Debris hits cost 6 s of oxygen and active electrical fields drain it. The hull is never hurt on a spacewalk. At empty oxygen the tether reels you back automatically. Tap EVA again to reel back early. Oxygen refills while you're aboard.
 - **[DONE]** New miner upgrades (Upgrades > Miner): **EVA mobility** (+15% speed), **Oxygen tank** (+25% oxygen), **Hand drill** (+30% drill power).
+- **[DONE]** Giant hollow rocks give the spacewalk its main job: the core can only be drilled out from inside (see *Giant hollow rocks* below). New miner upgrade: **Wide drill head**.
 - **[TODO]** Discovery contracts for relics, and boarding/repair events for the reinforced suit.
 
 ### No level caps (added 2026-11-04 at Tim's request)
@@ -218,6 +219,46 @@ Tim: "lets get a bunch more fields to play with different things in them". There
 - [DONE] Tests: every field is played for a minute on autopilot without errors; scavengers, volatile chains, ice refuel and coral regrowth each have a test (`node --test tests/`).
 - **[NEEDS DECISION]** Unlock costs and Laser levels for the late fields (35k to 200k lifetime, Laser 5 to 8) are my guesses. Without drones or weapons, late fields are slow (an alloy block takes ~60 s at the recommended laser), so the wing and weapons matter there. Tell me if you want them faster.
 - **[NEEDS DECISION]** Existing saves with enough lifetime credits will unlock Comet Wake, Scrapyard Drift and so on right away, and auto-advance now steps through them (e.g. Nearside > Comet Wake > Red Shard). OK, or should new fields only unlock going forward?
+
+### Giant hollow rocks: EVA in and mine from the inside (added 2026-11-07 at Tim's request)
+
+Tim: "a larger block ... you have to EVA and enter it ... hollow it out from the inside out before your ship can break it on the outside. Decent rewards, but more reasons to level up your miner and then actually use the miner."
+
+- **[DONE]** Every field (not the tutorial) now has a **giant rock**: a 6x6-cell rock (7x7 from Singularity Edge on, and **two** of them from Living Reef on). It sits in its own clearing, at least 520 units from the hangar, with a 2-cell gap around it so the ship can park. It's labelled **GIANT ROCK - hollowed 0/16** with a dashed outline.
+- **[DONE]** **The ship can't hurt it at first.** The laser, weapons, escort drones and scavengers ignore it, and aim assist and autopilot skip it. Tapping it shows a hint. The ship bumps off it like any other rock.
+- **[DONE]** **The way in is a gold hatch** on one side, usually the side facing the hangar. A pulsing arrow and **EVA IN** mark it. Only the miner fits through it: the ship can't enter. Coming near the rock for the first time shows a one-time caption.
+- **[DONE]** **Hollow it from inside:** park at the hatch, tap **EVA**, float through the hatch and drill out every **core cell** with the hand drill. Core cells are made of the field's rich core ore and each one pays when it breaks. The hand drill can't cut the closed shell from outside, so you have to go in. The dug-out cave shows dark. Each cell shows a "hollowed 5/16" caption.
+- **[DONE]** **Shelter inside:** debris and electrical fields can't reach the miner inside the rock, but oxygen still runs down. It refills aboard, so a bigger rock usually takes 2 or 3 trips at base gear.
+- **[DONE]** **Break the shell:** when the last core cell breaks, the shell turns weak. It gets glowing orange seams, the label changes to **BREAK THE SHELL +jackpot**, and the hatch seals into ordinary shell. Now the ship's laser, weapons and wing can break it, and the shell cells count toward clearing the field. Breaking the last shell cell **cracks the giant** and pays the **jackpot**, with a big burst and +30 XP x field tier.
+- **[DONE]** Auto-advance waits while you have a giant **started but not cracked**, so a field clear can't warp you away halfway through. A giant you never touch doesn't block the clear.
+- **[DONE]** The sortie summary shows **Giant rocks cracked xN (jackpot)**. The Fields screen lists the giant rock as a feature. The Miner upgrades tab explains it.
+- **[DONE]** **New miner upgrade: Wide drill head** (Upgrades > Miner, 300 / 750 / 1,600 / 3,400 cr, then x1.5). The hand drill also cuts the 4 cells next to its target at 25% of its power per level (max 100%). It works on normal blocks too.
+- **[DONE]** **Why level the miner now:** core cells get tougher in later fields and with Threat, but the drill doesn't count toward Threat. So **Hand drill**, **Wide drill head**, **Oxygen tank**, **EVA mobility** and miner rank all directly shorten the dig.
+- **Numbers at Threat 1** (all in `DATA.GIANT` in `js/data.js`; the code is in `js/sortie.js` > `placeGiants()`, `giantCellGone()`, `openGiant()`, `crackGiant()`, `drawGiants()`):
+
+| Field | Giants | Size | HP per core cell | Drill time, base drill | Drill Lv 4 + wide head Lv 3 (approx.) | Pays per giant (core + shell + jackpot) |
+| ----- | ------ | ---- | ---------------- | ---------------------- | -------------------------------- | ---------------------------------------- |
+| Nearside Belt | 1 | 6x6, 16 core cells | 16 | 43 s | 15 s | 2,652 (jackpot 1,500) |
+| Comet Wake | 1 | 6x6, 16 core cells | 22 | 58 s | 20 s | 3,978 (jackpot 2,250) |
+| Red Shard Field | 1 | 6x6, 16 core cells | 27 | 73 s | 25 s | 6,188 (jackpot 3,500) |
+| Scrapyard Drift | 1 | 6x6, 16 core cells | 33 | 87 s | 31 s | 8,398 (jackpot 4,750) |
+| Glass Moon | 1 | 6x6, 16 core cells | 38 | 102 s | 36 s | 10,608 (jackpot 6,000) |
+| Ember Reach | 1 | 6x6, 16 core cells | 44 | 117 s | 41 s | 12,818 (jackpot 7,250) |
+| Veil Nebula | 1 | 6x6, 16 core cells | 50 | 132 s | 46 s | 14,586 (jackpot 8,250) |
+| Far Orbit | 1 | 6x6, 16 core cells | 55 | 147 s | 52 s | 16,796 (jackpot 9,500) |
+| Singularity Edge | 1 | 7x7, 25 core cells | 61 | 253 s | 89 s | 25,440 (jackpot 12,000) |
+| Living Reef | 2 | 7x7, 25 core cells | 66 | 277 s | 97 s | 31,800 (jackpot 15,000) |
+| Old Warfront | 2 | 7x7, 25 core cells | 72 | 300 s | 105 s | 39,750 (jackpot 18,750) |
+| Corona Shelf | 2 | 7x7, 25 core cells | 78 | 323 s | 113 s | 50,350 (jackpot 23,750) |
+| Void Rift | 2 | 7x7, 25 core cells | 83 | 347 s | 122 s | 63,600 (jackpot 30,000) |
+
+  Drill time is drilling only; floating in and the oxygen trips add to it. For scale, a whole Nearside field is about 7,300 cr, so one Nearside giant is worth about a third of a field. Shell cells have 14 HP x the same tier factor and resistance 1, so the ship sweeps the open shell quickly. The jackpot is 25x the field's relic value; credits and HP also scale with Threat.
+- **[DONE]** Tests: every field except the tutorial gets its giant(s) with one hatch, solid cells and a safe distance from the dock. Ship damage and the drill on the closed shell do nothing. Drilling the core opens the shell and adds it to the field count. The real laser breaks the last cell and pays the jackpot. The miner walks in through the hatch while the ship can't, and the wide drill head caps at 100% (`node --test tests/*.test.js`, 17 tests pass). Also played in Chromium at phone size with no console errors.
+- **[DONE]** Existing tests adjusted: giant cells aren't counted in `w.left` until the shell opens. The "every field plays for a minute" test now runs 70 s, because Corona Shelf on that seed spent the whole minute on one alloy block (slow on purpose, not a bug).
+- **[NEEDS DECISION]** **Late-field dig time.** From Singularity Edge on, a giant takes longer to drill than a whole 3-minute sortie with a base drill, and progress doesn't carry over to the next sortie (fields are new every launch). That pushes drill upgrades hard, which is the point, but it may feel like a wall. Options: keep it, lower `tierHp` (0.35), or let a half-dug giant persist for the next launch.
+- **[NEEDS DECISION]** **Rewards:** are ~1/3 of a field's value per giant (Nearside) and the jackpot sizes right? Should a cracked giant also drop a guaranteed relic, or count toward contracts (e.g. a "Crack a giant rock" contract)?
+- **[NEEDS DECISION]** Should autopilot or the escort wing help more (e.g. autopilot parks at the hatch when you tap EVA near a giant)? Right now getting there and going in is manual on purpose.
+- **[TODO]** Sound: it reuses the existing chimes and booms; no dedicated "shell opens" sound yet.
 
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
@@ -311,6 +352,7 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Miner rank has no level cap. The existing first ten thresholds are unchanged; Rank 11 starts at 5,200 XP, and each later rank requires 300 more XP than the previous one. Existing XP automatically counts toward higher ranks. Each rank after 1 adds 5% laser and hand drill power, multiplying equipment upgrades; the bonus takes effect on the next launch and laser power contributes to threat.
 - [NEEDS DECISION] Miner upgrade costs are not in the README; I used 140-2,100 cr ranges. Confirm or replace.
 - [DONE] EVA mobility, oxygen tank and hand drill (see *Spacewalk / EVA* above).
+- [DONE] Wide drill head and giant hollow rocks that need the miner (see *Giant hollow rocks* above).
 - [TODO] Utility belt and consumables.
 
 **Contracts**
@@ -338,6 +380,7 @@ Players can make an account (email + password), sign in on any phone or computer
 6. **Cloud saves:** ~~Firebase setup~~ done. Still open: do you want Google sign-in as well as email + password? Recommended: restrict the API key to your site (step 6 of the Firebase setup).
 7. **Ship automation:** are the module prices and auto-fire thresholds OK, and should the autoloader be allowed to spend from your wallet? (See *Ship automation* above.)
 8. **New fields:** are the late-field unlock costs and pace right, and is it OK that existing saves unlock the new early fields immediately? (See *More fields* above.)
+9. **Giant rocks:** is the late-field dig time OK (it is longer than a sortie with a base drill), are the rewards right, and should a half-dug giant carry over to the next launch? (See *Giant hollow rocks* above.)
 
 ## Game Design Document
 

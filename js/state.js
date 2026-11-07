@@ -139,6 +139,7 @@ SM.State = (function () {
       evaSpeed: D.EVA.speed * (1 + 0.15 * (lvl('eva') - 1)),
       evaO2: D.EVA.o2 * (1 + 0.25 * (lvl('o2') - 1)),
       drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)) * rankPower,
+      drillSplash: Math.min(1, D.MINER.find(u => u.id === 'bit').per * (lvl('bit') - 1)), // wide drill head: side cut share
     };
   }
   function maxHull() { return stats().hull; }

@@ -143,6 +143,8 @@ SM.Sortie = (function () {
       const gy = Math.round(rand(dock.y - 480, dock.y - 170) / BS);
       place(gx, gy, pick(region.shell));
     }
+    // giant hollow rocks (DATA.GIANT): a shell the ship can't hurt around a core only the hand drill can cut
+    const giants = placeGiants(region, tutorial, blocks, grid, dock, wells);
     if (tutorial) { // the README's "one damaged common block"
       const gx = Math.floor(dock.x / BS), gy = Math.floor((dock.y - 200) / BS);
       grid.delete(key(gx, gy));
@@ -190,8 +192,54 @@ SM.Sortie = (function () {
         alive: true, seed: rand(0, 1000), flash: 0, prey: null, eat: 0, wait: rand(2, 6) });
     }
     const regrow = blocks.filter(b => M[b.mat].regen);
-    return { blocks, grid, dock, debris, fields, stars, relics, wells, mines, foes, regrow };
+    const left = blocks.filter(b => !b.giant).length; // giant cells only count once the shell opens
+    return { blocks, grid, dock, debris, fields, stars, relics, wells, mines, foes, regrow, giants, left };
   }
+  function placeGiants(region, tutorial, blocks, grid, dock, wells) {
+    const GI = D.GIANT, tier = Math.max(0, D.REGIONS.indexOf(region)), giants = [];
+    const n = tutorial ? 0 : D.giantCount(region);
+    const size = GI.size + (tier >= GI.bigFrom ? 1 : 0), tmul = 1 + GI.tierHp * tier, rv = (region.relic || 60) * TH.value;
+    const last = size - 1, cols = Math.floor(W / BS), rows = Math.floor((H - 700) / BS);
+    for (let i = 0, tries = 0; i < n && tries < 80; tries++) {
+      const gx0 = Math.round(rand(3, cols - size - 3)), gy0 = Math.round(rand(3, rows - size));
+      const cx = (gx0 + size / 2) * BS, cy = (gy0 + size / 2) * BS;
+      if (Math.hypot(cx - dock.x, cy - dock.y) < 520) continue;
+      if (wells.some(wl => Math.hypot(wl.x - cx, wl.y - cy) < wl.r + size * BS * 0.75)) continue;
+      if (giants.some(o => Math.hypot(o.x - cx, o.y - cy) < (o.size + size + 4) * BS * 0.6)) continue;
+      // clear the footprint plus a 2-cell moat so the ship can park at the hatch
+      for (let dx = -2; dx < size + 2; dx++) for (let dy = -2; dy < size + 2; dy++) {
+        const k = key(gx0 + dx, gy0 + dy), b = grid.get(k);
+        if (b) { grid.delete(k); b.gone = true; }
+      }
+      // the hatch sits in the middle of the side that faces the dock (or a random side)
+      const sides = [[Math.floor(size / 2), last, 0, 1], [Math.floor(size / 2), 0, 0, -1], [0, Math.floor(size / 2), -1, 0], [last, Math.floor(size / 2), 1, 0]];
+      const side = Math.random() < 0.6 ? sides[0] : sides[Math.floor(rand(0, 4))];
+      const G = { x: cx, y: cy, gx0, gy0, size, tier, cells: [], core: 0, coreLeft: 0, shellLeft: 0, open: false, cracked: false, started: false,
+        jackpot: Math.round(rv * GI.jackpot), hgx: gx0 + side[0], hgy: gy0 + side[1], nx: side[2], ny: side[3] };
+      G.hx = G.hgx * BS + BS / 2; G.hy = G.hgy * BS + BS / 2;
+      for (let dx = 0; dx < size; dx++) for (let dy = 0; dy < size; dy++) {
+        const edge = dx === 0 || dy === 0 || dx === last || dy === last;
+        if (edge && (dx === 0 || dx === last) && (dy === 0 || dy === last)) continue; // cut corners
+        const gx = gx0 + dx, gy = gy0 + dy;
+        const part = !edge ? 'core' : (gx === G.hgx && gy === G.hgy ? 'hatch' : 'shell');
+        const hp = (part === 'core' ? GI.coreHp : GI.shellHp) * tmul * TH.hp;
+        const b = { gx, gy, x: gx * BS + BS / 2, y: gy * BS + BS / 2, mat: part === 'core' ? pick(region.core) : 'crust',
+          value: Math.round(rv * (part === 'core' ? GI.coreValue * rand(0.8, 1.25) : GI.shellValue)),
+          maxHp: hp, hp, alive: true, seed: Math.random() * 1000, flash: 0, giant: G, part };
+        blocks.push(b); grid.set(key(gx, gy), b); G.cells.push(b);
+        if (part === 'core') G.core++; else G.shellLeft++;
+      }
+      G.coreLeft = G.core;
+      giants.push(G); i++;
+    }
+    if (giants.length) for (let i = blocks.length - 1; i >= 0; i--) if (blocks[i].gone) blocks.splice(i, 1);
+    return giants;
+  }
+  // Giant rock rules: the ship (laser, weapons, wing, scavengers) can only hurt an opened shell;
+  // the hand drill can cut the core, but never a closed shell.
+  function shipCan(b) { return !b.giant || (b.giant.open && b.part !== 'core'); }
+  function drillCan(b) { return !b.giant || b.part === 'core' || b.giant.open; }
+  function inGiant(p) { return w.giants.some(G => !G.cracked && Math.abs(p.x - G.x) < G.size * BS / 2 && Math.abs(p.y - G.y) < G.size * BS / 2); }
   function newDebris(region, dock) {
     let x, y;
     do { x = rand(60, W - 60); y = rand(60, H - 300); } while (dock && Math.hypot(x - dock.x, y - dock.y) < 400);
@@ -238,7 +286,7 @@ SM.Sortie = (function () {
       wing: [], eva: false, miner: null, o2: 0, relicCount: 0, relicCredits: 0,
       proj: [], fx: [], ammo: {}, maxAmmo: {}, weapon: null, salvage: 0, ammoRun: 0, ammoWallet: 0, shotsBought: 0, shotsSalvaged: 0,
       autoCd: 2, loadCd: 0, autoShots: 0, autoLoads: 0,
-      left: world.blocks.length, startRegion: region, cleared: 0, surveyed: {}, fieldCr: 0, clearBonus: 0,
+      left: world.left, startRegion: region, giantsCracked: 0, giantCr: 0, cleared: 0, surveyed: {}, fieldCr: 0, clearBonus: 0,
       booms: [], flare: region.flares ? region.flares.every * 0.6 : 0, flareOn: 0, windA: rand(0, Math.PI * 2), foeKills: 0,
     });
     st.wing.drones.forEach((cfg, i, all) => {
@@ -318,6 +366,7 @@ SM.Sortie = (function () {
       hullEnd: Math.max(0, Math.ceil(w.hull)), hullLost: Math.max(0, Math.round(w.hullStart - w.hull)),
       time: w.elapsed, wasTutorial: w.tut >= 0,
       cleared: w.cleared, surveyed: Object.keys(w.surveyed), endRegion: w.region.id,
+      giants: w.giantsCracked, giantCr: w.giantCr,
     };
     w = null;
     cb.onEnd && cb.onEnd(result);
@@ -451,6 +500,11 @@ SM.Sortie = (function () {
       const d = Math.hypot(b.x - p.x, b.y - p.y);
       if (d < bd) { bd = d; best = b; }
     }
+    if (best && !shipCan(best)) {
+      SM.Audio.deny();
+      caption('Giant rock: too thick for the laser. Park at the gold hatch, tap EVA and drill it hollow from inside', 'warn');
+      return;
+    }
     if (best) {
       w.target = best; SM.Audio.click();
       if (w.tut >= 0 && w.tut <= 1) tutorialStep(2);
@@ -461,7 +515,7 @@ SM.Sortie = (function () {
     const r = Math.ceil(maxD / BS), gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
     for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
-      if (!b || !b.alive) continue;
+      if (!b || !b.alive || !shipCan(b)) continue;
       const d = Math.hypot(b.x - s.x, b.y - s.y);
       if (d < bd) { bd = d; best = b; }
     }
@@ -493,7 +547,7 @@ SM.Sortie = (function () {
       if (!w.apGoal) {
         let best = null, bs = Infinity;
         for (const b of w.blocks) {
-          if (!b.alive) continue;
+          if (!b.alive || !shipCan(b)) continue;
           const sc = Math.hypot(b.x - s.x, b.y - s.y) / (1 + Math.log(M[b.mat].value / 5 + 1) * 0.35);
           if (sc < bs) { bs = sc; best = b; }
         }
@@ -622,6 +676,7 @@ SM.Sortie = (function () {
       if (nb && (!w.target || !inRange)) { w.target = nb; inRange = true; }
     }
     // laser + heat
+    if (w.target && !shipCan(w.target)) w.target = null;
     const canFire = wantFire && w.target && inRange && !w.overheated;
     w.firing = !!canFire;
     if (canFire) {
@@ -697,7 +752,8 @@ SM.Sortie = (function () {
     if (w.hull <= 0) { caption('Hull failure - emergency return', 'danger'); return end('hull'); }
     if (w.fuel <= 0) { caption('Fuel empty - towed back to the hangar', 'warn'); return end('fuel'); }
     if (w.time <= 0) return end('time');
-    if (w.left <= 0 && !w.eva) advanceWorld(); // field cleared with time to spare
+    // field cleared with time to spare (waits for the miner, and for a giant rock you have started on)
+    if (w.left <= 0 && !w.eva && !w.giants.some(G => G.started && !G.cracked)) advanceWorld();
   }
 
   // ---------- field features (see DATA.REGIONS) ----------
@@ -733,6 +789,12 @@ SM.Sortie = (function () {
   }
   function updateHazards(dt) {
     const s = w.ship, R = w.region;
+    // giant rocks: a one-time hint when you first come near one
+    w.giants.forEach(G => {
+      if (G.hinted || G.open || Math.hypot(G.x - s.x, G.y - s.y) > G.size * BS / 2 + 160) return;
+      G.hinted = true; SM.Audio.click();
+      caption('Giant rock! Park at the gold hatch, tap EVA and drill it hollow from inside', 'good');
+    });
     // solar wind: a current that drags the ship and debris
     if (R.wind) {
       w.windA += R.wind.turn * dt;
@@ -823,6 +885,7 @@ SM.Sortie = (function () {
         if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: b.x, y: b.y, vx: rand(-40, 40), vy: rand(-40, 40), t: 0, life: 0.3, color: M[b.mat].color, size: 2 });
         if (b.hp <= 0) {
           b.alive = false; w.grid.delete(key(b.gx, b.gy)); w.left--; f.prey = null; f.wait = 0.6;
+          if (b.giant) giantCellGone(b);
           if (w.target === b) w.target = null;
           if (!w.warned.scav || w.elapsed - w.warned.scav > 6) { w.warned.scav = w.elapsed; caption('A scavenger ate a block - shoot it!', 'warn'); }
         }
@@ -855,7 +918,7 @@ SM.Sortie = (function () {
     w.fieldCr = 0;
     const world = generate(next, false);
     Object.assign(w, { region: next, blocks: world.blocks, grid: world.grid, debris: world.debris, fields: world.fields,
-      stars: world.stars, relics: world.relics, left: world.blocks.length,
+      stars: world.stars, relics: world.relics, left: world.left, giants: world.giants,
       wells: world.wells, mines: world.mines, foes: world.foes, regrow: world.regrow, booms: [],
       flare: next.flares ? next.flares.every * 0.6 : 0, flareOn: 0,
       target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0 });
@@ -872,12 +935,12 @@ SM.Sortie = (function () {
     vibrate([40, 40, 120]);
   }
 
-  function collideBlocks(s, R0) {
+  function collideBlocks(s, R0, miner) {
     const SR = R0 || SHIP_R;
     const gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
-      if (!b || !b.alive) continue;
+      if (!b || !b.alive || (miner && b.part === 'hatch')) continue; // the hatch lets the miner in, never the ship
       const half = BS / 2;
       const cx = Math.max(b.x - half, Math.min(s.x, b.x + half));
       const cy = Math.max(b.y - half, Math.min(s.y, b.y + half));
@@ -924,7 +987,7 @@ SM.Sortie = (function () {
     const r = Math.ceil(reach / BS), gx = Math.floor(s.x / BS), gy = Math.floor(s.y / BS);
     for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
-      if (!b || !b.alive) continue;
+      if (!b || !b.alive || !shipCan(b)) continue;
       const dist = Math.hypot(b.x - s.x, b.y - s.y);
       if (dist > reach) continue;
       const eff = b.hp * M[b.mat].res, shipDps = b === shipOn ? w.S.dps : 0;
@@ -1111,7 +1174,7 @@ SM.Sortie = (function () {
     // tether limit
     const tx = m.x - s.x, ty = m.y - s.y, td = Math.hypot(tx, ty);
     if (td > D.EVA.tether) { m.x = s.x + tx / td * D.EVA.tether; m.y = s.y + ty / td * D.EVA.tether; }
-    if (!m.reel) collideBlocks(m, 6);
+    if (!m.reel) collideBlocks(m, 6, true);
     // hand drill: short range, ignores resistance
     m.drilling = false;
     if (!m.reel && (input.mine || settings().autoFire)) {
@@ -1119,22 +1182,28 @@ SM.Sortie = (function () {
         m.target = null; let bd = D.EVA.drillRange + BS / 2;
         const gx = Math.floor(m.x / BS), gy = Math.floor(m.y / BS);
         for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) {
-          const b = w.grid.get(key(gx + dx, gy + dy)); if (!b || !b.alive) continue;
-          const d = Math.hypot(b.x - m.x, b.y - m.y); if (d < bd) { bd = d; m.target = b; }
+          const b = w.grid.get(key(gx + dx, gy + dy)); if (!b || !b.alive || !drillCan(b)) continue;
+          const d = Math.hypot(b.x - m.x, b.y - m.y) - (b.part === 'core' ? 6 : 0); // inside a giant, prefer its core
+          if (d < bd) { bd = d; m.target = b; }
         }
       }
       if (m.target) {
         m.drilling = true;
         const t = m.target;
-        hurtBlock(t, S.drillDps * M[t.mat].res * dt, true); // x res cancels resistance
+        hurtBlock(t, S.drillDps * M[t.mat].res * dt, true, true); // x res cancels resistance
+        if (S.drillSplash > 0) [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { // wide drill head
+          const nb = w.grid.get(key(t.gx + dx, t.gy + dy));
+          if (nb && nb.alive && drillCan(nb)) hurtBlock(nb, S.drillDps * S.drillSplash * M[nb.mat].res * dt, true, true);
+        });
         if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: t.x + rand(-5, 5), y: t.y + rand(-5, 5), vx: rand(-50, 50), vy: rand(-50, 50), t: 0, life: 0.3, color: '#ffd76a', size: 2 });
         if (!t.alive) m.target = null;
       }
     }
     // relics
     w.relics.forEach(r => { if (r.alive && Math.hypot(r.x - m.x, r.y - m.y) < 18) collectRelic(r, 'Relic recovered'); });
-    // hazards hit the suit (oxygen), not the hull
-    w.debris.forEach(d => {
+    // hazards hit the suit (oxygen), not the hull. Inside a giant rock the walls shelter you.
+    const sheltered = inGiant(m);
+    if (!sheltered) w.debris.forEach(d => {
       const dist = Math.hypot(d.x - m.x, d.y - m.y);
       if (dist < d.r + 7 && !(m.inv > 0)) {
         w.o2 = Math.max(0, w.o2 - D.EVA.debrisO2); m.inv = 1; SM.Audio.damage(); vibrate(60);
@@ -1143,7 +1212,7 @@ SM.Sortie = (function () {
       }
     });
     if (m.inv > 0) m.inv -= dt;
-    w.fields.forEach(f => { if (f.phase === 2 && Math.hypot(f.x - m.x, f.y - m.y) < f.r) w.o2 = Math.max(0, w.o2 - 4 * dt); });
+    if (!sheltered) w.fields.forEach(f => { if (f.phase === 2 && Math.hypot(f.x - m.x, f.y - m.y) < f.r) w.o2 = Math.max(0, w.o2 - 4 * dt); });
   }
 
   // draw helpers for the wing, the miner and relics
@@ -1385,8 +1454,9 @@ SM.Sortie = (function () {
   }
 
   // weapon damage goes through block resistance just like the laser
-  function hurtBlock(b, dmg, quiet) {
+  function hurtBlock(b, dmg, quiet, drill) {
     if (!b.alive) return;
+    if (b.giant && !(drill ? drillCan(b) : shipCan(b))) return; // giant rock: shell is closed / core is drill-only
     const m = M[b.mat];
     b.hp -= dmg / m.res; b.flash = 0.12; b.hitAt = w.elapsed;
     if (b.foe) { if (b.hp <= 0) killFoe(b); return; }
@@ -1443,14 +1513,15 @@ SM.Sortie = (function () {
   }
   function nearestBlockTo(x, y, maxD) {
     let best = null, bd = maxD;
-    for (const b of w.blocks) { if (!b.alive) continue; const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
+    for (const b of w.blocks) { if (!b.alive || !shipCan(b)) continue; const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } }
     return best;
   }
 
   function breakBlock(b) {
     b.alive = false; w.grid.delete(key(b.gx, b.gy));
     const m = M[b.mat];
-    w.credits += b.value; w.fieldCr += b.value; w.broken++; w.xp += m.xp; w.left--;
+    w.credits += b.value; w.fieldCr += b.value; w.broken++; w.xp += m.xp;
+    if (!b.giant || b.counted) w.left--;
     w.surveyed[w.region.id] = true;
     w.byMatCr[b.mat] = (w.byMatCr[b.mat] || 0) + b.value;
     w.byMat[b.mat] = (w.byMat[b.mat] || 0) + 1;
@@ -1472,9 +1543,81 @@ SM.Sortie = (function () {
     if (w.target === b) {
       w.target = settings().aimAssist ? autoTarget(w.S.range) : null;
     }
+    if (b.giant) giantCellGone(b);
     if (w.tut >= 0 && w.tut <= 2) tutorialStep(3);
     else if (w.tut === 3 && w.broken >= 3) tutorialStep(4);
     if (cb.onBreak) cb.onBreak();
+  }
+
+  // ---------- giant hollow rocks (DATA.GIANT) ----------
+  function giantCellGone(b) {
+    const G = b.giant;
+    if (b.part === 'core') {
+      G.coreLeft--; G.started = true;
+      if (G.coreLeft > 0) caption(`Giant rock hollowed ${G.core - G.coreLeft}/${G.core}`);
+      else openGiant(G);
+    } else if (--G.shellLeft <= 0 && !G.cracked) crackGiant(G);
+  }
+  // core gone: the shell turns weak, counts toward the field and the ship can break it
+  function openGiant(G) {
+    G.open = true;
+    G.cells.forEach(c => { if (!c.alive) return; if (c.part === 'hatch') c.part = 'shell'; c.counted = true; w.left++; });
+    w.pops.push({ x: G.x, y: G.y - G.size * BS / 2 - 14, text: 'HOLLOW! BREAK THE SHELL', t: 0, color: '#ffb35c', size: 18 });
+    caption('Giant rock is hollow - board and break the shell for the jackpot!', 'good');
+    SM.Audio.contract(); vibrate([40, 40, 80]);
+    if (settings().shake) w.shake = Math.max(w.shake, 6);
+  }
+  function crackGiant(G) {
+    G.cracked = true;
+    const pay = G.jackpot, xp = D.GIANT.xp * (G.tier + 1);
+    w.credits += pay; w.fieldCr += pay; w.giantsCracked++; w.giantCr += pay; w.xp += xp;
+    w.pops.push({ x: G.x, y: G.y, text: `GIANT CRACKED +${pay.toLocaleString()}`, t: 0, color: '#ffd76a', size: 22 });
+    caption(`Giant rock cracked! +${pay.toLocaleString()} cr jackpot, +${xp} XP`, 'good');
+    SM.Audio.boom(); SM.Audio.contract(); vibrate([60, 40, 140]);
+    if (settings().shake) w.shake = Math.max(w.shake, 10);
+    const n = settings().reducedFx ? 16 : 70;
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(60, 320);
+      w.particles.push({ x: G.x, y: G.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.5, 1.1), color: i % 3 ? '#ffd76a' : M.crust.color, size: rand(2, 5) });
+    }
+    w.fx.push({ kind: 'ring', x: G.x, y: G.y, r: G.size * BS * 0.8, t: 0, life: 0.6, color: '#ffd76a' });
+  }
+  // underlay (the cave you've dug) and overlay (outline, hatch marker, progress label)
+  function drawGiants(over, vx0, vx1, vy0, vy1) {
+    const now = performance.now() / 1000;
+    w.giants.forEach(G => {
+      const half = G.size * BS / 2;
+      if (G.cracked || G.x + half < vx0 || G.x - half > vx1 || G.y + half < vy0 - 30 || G.y - half > vy1) return;
+      const x0 = G.gx0 * BS, y0 = G.gy0 * BS, side = G.size * BS;
+      if (!over) {
+        g.fillStyle = '#140d08'; g.fillRect(x0 + BS, y0 + BS, side - BS * 2, side - BS * 2); // dug-out cavity
+        g.fillStyle = 'rgba(255,179,92,0.06)'; g.fillRect(x0 + BS, y0 + BS, side - BS * 2, side - BS * 2);
+        return;
+      }
+      g.save();
+      g.strokeStyle = G.open ? `rgba(255,154,60,${0.55 + 0.35 * Math.sin(now * 6)})` : 'rgba(205,170,130,0.55)';
+      g.lineWidth = 3; g.setLineDash(G.open ? [] : [10, 6]);
+      g.beginPath(); g.roundRect ? g.roundRect(x0 - 4, y0 - 4, side + 8, side + 8, BS * 0.9) : g.rect(x0 - 4, y0 - 4, side + 8, side + 8); g.stroke();
+      g.setLineDash([]);
+      // hatch: gold frame + arrow pointing in (until it is open)
+      if (!G.open) {
+        const h = BS / 2 - 1, p = 0.5 + 0.5 * Math.sin(now * 4);
+        g.strokeStyle = '#ffd76a'; g.lineWidth = 2.5; g.strokeRect(G.hx - h, G.hy - h, h * 2, h * 2);
+        const ax = G.hx + G.nx * (BS * 0.9 + p * 6), ay = G.hy + G.ny * (BS * 0.9 + p * 6), a = Math.atan2(-G.ny, -G.nx);
+        g.save(); g.translate(ax, ay); g.rotate(a); g.fillStyle = '#ffd76a';
+        g.beginPath(); g.moveTo(8, 0); g.lineTo(-6, -7); g.lineTo(-6, 7); g.closePath(); g.fill(); g.restore();
+        g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.7)';
+        const tx = G.hx + G.nx * BS * 1.6, ty = G.hy + G.ny * BS * 1.6 + (G.nx ? -12 : 0);
+        g.strokeText('EVA IN', tx, ty); g.fillStyle = '#ffd76a'; g.fillText('EVA IN', tx, ty);
+      }
+      // label
+      const label = G.open ? `BREAK THE SHELL  +${G.jackpot.toLocaleString()}` : `GIANT ROCK  hollowed ${G.core - G.coreLeft}/${G.core}`;
+      g.font = '800 12px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(label, G.x, y0 - 16);
+      g.fillStyle = G.open ? '#ffb35c' : '#e8d6bf'; g.fillText(label, G.x, y0 - 16);
+      g.restore();
+    });
   }
 
   // ---------- rendering ----------
@@ -1557,7 +1700,8 @@ SM.Sortie = (function () {
     g.strokeStyle = 'rgba(120,200,255,0.10)'; g.lineWidth = 1;
     g.beginPath(); g.arc(s.x, s.y, w.S.range, 0, Math.PI * 2); g.stroke();
 
-    // blocks
+    // blocks (giant rocks get their dug-out cave drawn underneath first)
+    drawGiants(false, vx0, vx1, vy0, vy1);
     const hc = settings().highContrast;
     for (const b of w.blocks) {
       if (!b.alive || b.x < vx0 || b.x > vx1 || b.y < vy0 || b.y > vy1) continue;
@@ -1568,10 +1712,12 @@ SM.Sortie = (function () {
     for (const b of w.blocks) {
       if (!b.alive || b.x < vx0 || b.x > vx1 || b.y < vy0 || b.y > vy1) continue;
       if (Math.hypot(b.x - s.x, b.y - s.y) > w.S.scan) continue;
-      const v = b.value; if (M[b.mat].value < 12) continue;
+      const v = b.value; if (M[b.mat].value < 12 || !shipCan(b) && b.part !== 'core') continue;
       g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(b.x - 13, b.y - BS / 2 - 9, 26, 12);
       g.fillStyle = '#ffd76a'; g.fillText(v, b.x, b.y - BS / 2 - 3);
     }
+
+    drawGiants(true, vx0, vx1, vy0, vy1);
 
     // target reticle + laser
     if (w.target && w.target.alive) {
@@ -1761,7 +1907,41 @@ SM.Sortie = (function () {
     g.restore();
   }
 
+  function drawGiantCell(b, hc) {
+    const h = BS / 2, G = b.giant, m = M[b.mat];
+    if (b.part === 'core') { // rich core: its material, a little darker, seen through the cave
+      g.fillStyle = b.flash > 0 ? '#ffffff' : m.color; if (b.flash > 0) b.flash -= 0.016;
+      g.fillRect(b.x - h + 1, b.y - h + 1, h * 2 - 2, h * 2 - 2);
+      g.fillStyle = 'rgba(20,12,6,0.32)'; g.fillRect(b.x - h + 1, b.y - h + 1, h * 2 - 2, h * 2 - 2);
+      g.fillStyle = g.strokeStyle = hc ? '#000' : 'rgba(0,0,0,0.45)'; glyph(m.glyph, b.x, b.y, 7);
+    } else if (b.part === 'hatch') {
+      g.fillStyle = '#0b0705'; g.fillRect(b.x - h, b.y - h, h * 2, h * 2);
+      g.fillStyle = 'rgba(255,215,106,0.18)'; g.fillRect(b.x - h + 5, b.y - h + 5, h * 2 - 10, h * 2 - 10);
+      return;
+    } else { // shell: one solid mass (no gaps between cells) with rivet-like grain
+      g.fillStyle = b.flash > 0 ? '#ffffff' : (G.open ? '#8a6c50' : m.color); if (b.flash > 0) b.flash -= 0.016;
+      g.fillRect(b.x - h, b.y - h, h * 2, h * 2);
+      g.fillStyle = hc ? '#000' : 'rgba(0,0,0,0.22)';
+      const r = b.seed;
+      for (let i = 0; i < 4; i++) g.fillRect(b.x + Math.cos(r + i * 1.7) * h * 0.6 - 2, b.y + Math.sin(r * 1.3 + i * 2.1) * h * 0.6 - 2, 4, 4);
+      if (G.open) { // glowing seams: the shell is weak now
+        g.strokeStyle = '#ff9a3c'; g.lineWidth = 1.6; g.beginPath();
+        g.moveTo(b.x - h * 0.8, b.y + Math.sin(r) * h * 0.5); g.lineTo(b.x, b.y + Math.cos(r) * h * 0.3); g.lineTo(b.x + h * 0.8, b.y - Math.sin(r) * h * 0.5);
+        g.stroke();
+      }
+    }
+    const st = b.state || 0;
+    if (st > 0) {
+      g.strokeStyle = 'rgba(0,0,0,0.75)'; g.lineWidth = 1.6; g.beginPath();
+      for (let i = 0; i < (st === 1 ? 2 : 5); i++) {
+        const a = b.seed + i * 2.1;
+        g.moveTo(b.x + Math.cos(a) * 3, b.y + Math.sin(a) * 3); g.lineTo(b.x + Math.cos(a - 0.1) * h * 0.9, b.y + Math.sin(a - 0.1) * h * 0.9);
+      }
+      g.stroke();
+    }
+  }
   function drawBlock(b, hc) {
+    if (b.giant) return drawGiantCell(b, hc);
     const m = M[b.mat], h = BS / 2 - 1;
     g.fillStyle = b.flash > 0 ? '#ffffff' : m.color;
     if (b.flash > 0) b.flash -= 0.016;
@@ -1807,6 +1987,7 @@ SM.Sortie = (function () {
       case 'plus': g.fillRect(x - r, y - 1.5, r * 2, 3); g.fillRect(x - 1.5, y - r, 3, r * 2); break;
       case 'square': g.strokeRect(x - r * 0.7, y - r * 0.7, r * 1.4, r * 1.4); g.fillRect(x - r * 0.25, y - r * 0.25, r * 0.5, r * 0.5); break;
       case 'coin': g.beginPath(); g.arc(x, y, r * 0.75, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(x - 1, y - r * 0.5, 2, r); break;
+      case 'hash': g.fillRect(x - r, y - r * 0.4 - 1, r * 2, 2); g.fillRect(x - r, y + r * 0.4 - 1, r * 2, 2); g.fillRect(x - r * 0.4 - 1, y - r, 2, r * 2); g.fillRect(x + r * 0.4 - 1, y - r, 2, r * 2); break;
       case 'eye': g.beginPath(); g.ellipse(x, y, r, r * 0.55, 0, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(x, y, r * 0.3, 0, Math.PI * 2); g.fill(); break;
       case 'star':
         g.beginPath();
@@ -1859,5 +2040,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), clearBonus };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), clearBonus };
 })();

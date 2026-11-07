@@ -250,12 +250,14 @@ SM.UI = (function () {
       const fl = St.lvl('fscan');
       html += upgradeRow(u2, 'fscan', `Contract rewards: ${pct(S.contractBonus - 1)}` + (St.upgradeCost('fscan') == null ? '' : ` &rarr; <b>${pct(0.15 * fl)}</b>`));
       html += `<h3>Spacewalk gear</h3><div class="card small muted">Tap <b>EVA</b> during a sortie to leave the ship on a tether. The hand drill <b>ignores block resistance</b> (great on cobalt, iridium and alloy), and glowing <b>relics</b> can only be picked up on foot. Oxygen refills once you're back aboard; debris and electrical fields drain it.</div>`;
+      html += `<div class="card small muted"><b>Giant rocks:</b> every field has a giant hollow rock the ship's laser can't hurt. Park at its gold hatch, go EVA, squeeze inside and drill out the whole core (inside, the walls shelter you from debris). Then the shell turns weak: break it with the ship for a jackpot. A stronger drill, more oxygen and a wide drill head make this much faster, and the core gets tougher in later fields.</div>`;
       const evaEff = {
         eva: l => `Speed ${Math.round(D.EVA.speed * (1 + 0.15 * (l - 1)))}`,
         o2: l => `Oxygen ${Math.round(D.EVA.o2 * (1 + 0.25 * (l - 1)))}s`,
         drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1)) * (1 + D.RANK_POWER * (St.rank() - 1))).toFixed(1)} dmg/s (ignores resistance)`,
+        bit: l => `Also cuts the 4 cells around the target at ${Math.round(Math.min(1, D.MINER.find(x => x.id === 'bit').per * (l - 1)) * 100)}% power`,
       };
-      ['eva', 'o2', 'drill'].forEach(id => {
+      ['eva', 'o2', 'drill', 'bit'].forEach(id => {
         const u = D.MINER.find(x => x.id === id), l = St.lvl(id);
         html += upgradeRow(u, id, evaEff[id](l) + (St.upgradeCost(id) == null ? '' : ` &rarr; <b>${evaEff[id](l + 1)}</b>`));
       });
@@ -499,6 +501,7 @@ SM.UI = (function () {
       const endR = D.REGIONS.find(x => x.id === res.endRegion);
       rows += `<div class="sum"><span>Fields cleared x${res.cleared} - reached ${esc(endR ? endR.name : '')}</span><span class="pos">+${fmt(res.clearBonus || 0)}</span></div>`;
     }
+    if (res.giants > 0) rows += `<div class="sum"><span>Giant rocks cracked x${res.giants} (jackpot)</span><span>${fmt(res.giantCr)}</span></div>`;
     if (res.relicCount > 0) rows += `<div class="sum"><span>Relics recovered x${res.relicCount}</span><span>${fmt(res.relicCredits)}</span></div>`;
     if (res.ammoRun > 0) rows += `<div class="sum"><span>Ammo reloads bought (${res.shotsBought})</span><span class="neg">-${fmt(res.ammoRun)}</span></div>`;
     if (res.emergency) rows += `<div class="sum"><span>Emergency loss (kept ${Math.round(res.share * 100)}%)</span><span class="neg">-${fmt(res.raw - res.credits)}</span></div>`;

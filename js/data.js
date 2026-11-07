@@ -25,6 +25,8 @@ SM.DATA = (function () {
     voidstone:{ name: 'Void stone',    health: 60,  res: 3.5, value: 18,  color: '#2b2d3a', edge: '#6a6e8a', glyph: 'square', xp: 4,
                 note: 'Armour rock. Nearly laser-proof and cheap: blast it, drill it on a spacewalk, or go around.' },
     gold:     { name: 'Star gold',     health: 95,  res: 2.2, value: 190, color: '#ffcf3f', edge: '#b58a12', glyph: 'coin',  xp: 9 },
+    // Shell of a giant hollow rock (see GIANT below). Never spawns on its own; health/value are set per field.
+    crust:    { name: 'Giant crust',   health: 14,  res: 1.0, value: 24,  color: '#7a6450', edge: '#3b2f24', glyph: 'hash',  xp: 2 },
     // Not a rock: the scavenger drones in some fields. They use the block rules so the laser and weapons hit them.
     scav:     { name: 'Scavenger drone', health: 45, res: 1.0, value: 120, color: '#ff3d71', edge: '#99183d', glyph: 'eye', xp: 6, foe: true },
   };
@@ -121,6 +123,8 @@ SM.DATA = (function () {
     if (r.mines) out.push('Mines');
     if (r.scavs) out.push('Scavenger drones');
     if (r.fields) out.push('Electrical fields');
+    const gc = giantCount(r);
+    if (gc) out.push(`Giant hollow rock${gc > 1 ? ' x' + gc : ''}: spacewalk inside, drill it hollow, then break the shell for a jackpot`);
     mats.forEach(m => { if (MATERIALS[m].note && (!known || known(m))) out.push(MATERIALS[m].name + ': ' + MATERIALS[m].note); });
     return out;
   }
@@ -145,6 +149,8 @@ SM.DATA = (function () {
     { id: 'eva',     name: 'EVA mobility',    stat: 'Spacewalk speed',  per: 0.15,  costs: [150, 400, 900, 2000], unit: '%' },
     { id: 'o2',      name: 'Oxygen tank',     stat: 'Spacewalk time',   per: 0.25,  costs: [150, 400, 900, 2000], unit: '%' },
     { id: 'drill',   name: 'Hand drill',      stat: 'Drill power',      per: 0.30,  costs: [200, 500, 1100, 2400], unit: '%' },
+    // Added 2026-11-07 with giant rocks: the drill also cuts the 4 cells/blocks next to its target at this share of its power (max 100%).
+    { id: 'bit',     name: 'Wide drill head', stat: 'Side cut',         per: 0.25,  costs: [300, 750, 1600, 3400], unit: '%' },
   ];
 
   // Escort wing: drones that fly around the ship during a sortie and mine on their own.
@@ -202,6 +208,20 @@ SM.DATA = (function () {
     debrisO2: 6,      // oxygen lost when debris hits the miner
     relicsPerField: 4,
   };
+
+  // Giant hollow rocks (added 2026-11-07 at Tim's request). A big rock the ship cannot hurt at first:
+  // park by its gold hatch, go EVA, squeeze in and drill out every core cell from the inside (hand drill only).
+  // Once the core is gone the shell turns weak and the ship (laser, weapons, wing) can break it for a jackpot.
+  //   tier        = the field's place in the unlock order (Nearside 0 ... Void Rift 12)
+  //   count       giant rocks per field; one more from tier `twoFrom`
+  //   size        cells per side (1-cell shell ring around the core, corners cut); one bigger from tier `bigFrom`
+  //   coreHp      health per core cell x (1 + tierHp x tier) x Threat hp. The hand drill ignores resistance.
+  //   shellHp     health per shell cell once hollow (resistance 1), same scaling
+  //   coreValue, shellValue, jackpot   x the field's relic value x Threat value (credits per core cell / shell cell / for cracking it)
+  //   xp          x (tier + 1) when it cracks
+  const GIANT = { count: 1, twoFrom: 9, size: 6, bigFrom: 8, tierHp: 0.35, coreHp: 16, shellHp: 14,
+    coreValue: 0.8, shellValue: 0.4, jackpot: 25, xp: 30 };
+  function giantCount(r) { const t = REGIONS.indexOf(r); return t < 0 ? 0 : GIANT.count + (t >= GIANT.twoFrom ? 1 : 0); }
 
   // Offline mining drone (not in the original README - added for offline gains).
   const DRONE = {
@@ -300,5 +320,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { MATERIALS, REGIONS, features, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR };
+  return { MATERIALS, REGIONS, features, SHUTTLE, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, CLEAR, GIANT, giantCount };
 })();

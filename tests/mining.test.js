@@ -161,7 +161,7 @@ test('clearing every block before the timer advances to the next unlocked world'
   let ended = null;
   SM.Sortie.start('nearside', { onEnd: r => { ended = r; } });
   const w = SM.Sortie._debug();
-  assert.equal(w.left, w.blocks.length);
+  assert.equal(w.left, w.blocks.filter(b => !b.giant).length, 'giant rock cells do not count until the shell opens');
   const timeBefore = w.time;
   w.fieldCr = 1000;
   w.left = 0; // pretend the last block just broke
@@ -169,7 +169,7 @@ test('clearing every block before the timer advances to the next unlocked world'
   assert.equal(SM.Sortie.isRunning(), true, 'sortie keeps going');
   assert.equal(w.region.id, 'redshard');
   assert.equal(w.cleared, 1);
-  assert.equal(w.left, w.blocks.length);
+  assert.equal(w.left, w.blocks.filter(b => !b.giant).length);
   assert.ok(w.blocks.length > 500 && w.blocks.every(b => b.alive));
   assert.ok(w.time > timeBefore + SM.DATA.CLEAR.time - 1, 'remaining time carries over plus clear bonus time');
   const expected = SM.Sortie.clearBonus(1000, timeBefore - 0.1, 1, SM.DATA.REGIONS[0], SM.State.threat().value);
@@ -222,7 +222,7 @@ test('breaking blocks counts down the field', () => {
   const w = SM.Sortie._debug();
   advance(30);
   assert.ok(w.broken > 0);
-  assert.equal(w.left, w.blocks.filter(b => b.alive).length);
+  assert.equal(w.left, w.blocks.filter(b => b.alive && (!b.giant || b.counted)).length);
 });
 
 test('every field plays for a minute on autopilot without errors and has its own features', () => {
@@ -241,7 +241,7 @@ test('every field plays for a minute on autopilot without errors and has its own
     assert.equal(w.wells.length, region.wells || 0, `${region.id} wells`);
     assert.equal(w.foes.length, region.scavs || 0, `${region.id} scavengers`);
     if (region.mines) assert.ok(w.mines.length >= region.mines - 2, `${region.id} mines ${w.mines.length}`);
-    g2.advance(60);
+    g2.advance(70); // Corona Shelf is slow on purpose: a lone alloy block can take ~60 s at this laser
     assert.ok(w.broken > 0, `${region.id}: mined something (${w.broken})`);
   }
 });
@@ -292,4 +292,104 @@ test('volatile ore chain-explodes, ice refuels, coral regrows', () => {
   coral.hp = coral.maxHp * 0.3; coral.hitAt = w.elapsed;
   advance(5);
   assert.ok(coral.hp > coral.maxHp * 0.6, 'coral grew back');
+});
+
+test('every field but the tutorial has a giant hollow rock, sealed until the core is drilled out', () => {
+  const { SM } = game(9);
+  SM.State.get().tutorial = false;
+  for (const region of SM.DATA.REGIONS) {
+    SM.Sortie.start(region.id);
+    const w = SM.Sortie._debug();
+    assert.equal(w.giants.length, SM.DATA.giantCount(region), `${region.id} giants`);
+    w.giants.forEach(G => {
+      assert.ok(G.core >= 16 && G.shellLeft >= 16, `${region.id}: ${G.core} core, ${G.shellLeft} shell`);
+      assert.equal(G.cells.filter(c => c.part === 'hatch').length, 1, 'one hatch');
+      G.cells.forEach(c => assert.equal(w.grid.get(c.gx * 100000 + c.gy), c, 'cells are solid'));
+      assert.ok(Math.hypot(G.x - w.dock.x, G.y - w.dock.y) > 500, 'away from the dock');
+    });
+    assert.equal(w.grid.size, w.blocks.length);
+    SM.Sortie.end('abort');
+  }
+  SM.State.get().tutorial = true;
+  SM.Sortie.start('nearside');
+  assert.equal(SM.Sortie._debug().giants.length, 0, 'no giant in the tutorial');
+});
+
+test('giant rock: ship cannot hurt it, the drill hollows it, then the ship breaks the shell for a jackpot', () => {
+  const { SM, advance } = game(13);
+  const st = SM.State.get(); st.tutorial = false; st.settings.autoFire = false; st.settings.autopilot = false;
+  let res = null;
+  SM.Sortie.start('nearside', { onEnd: r => { res = r; } });
+  const w = SM.Sortie._debug();
+  w.debris = [];
+  const G = w.giants[0], shell = G.cells.filter(c => c.part !== 'core'), core = G.cells.filter(c => c.part === 'core');
+  // ship weapons and lasers bounce off the closed shell, and can't reach the core either
+  shell.concat(core).forEach(c => SM.Sortie._hurt(c, 9999, false));
+  assert.ok(G.cells.every(c => c.alive), 'ship damage does nothing to a sealed giant');
+  // and the hand drill can't cut the closed shell from outside
+  shell.forEach(c => SM.Sortie._hurt(c, 9999, true));
+  assert.ok(shell.every(c => c.alive && c.hp === c.maxHp), 'drill cannot cut the closed shell');
+  // drill out the core: each cell pays, and the shell opens
+  const left = w.left, credits = w.credits;
+  core.forEach(c => SM.Sortie._hurt(c, 9999, true));
+  assert.ok(core.every(c => !c.alive) && G.open, 'hollow -> open');
+  assert.equal(w.left, left + shell.length, 'the open shell now counts toward clearing the field');
+  assert.ok(w.credits > credits, 'core cells pay out');
+  assert.ok(shell.every(c => c.part === 'shell'), 'hatch becomes ordinary shell');
+  // the ship's laser now breaks the shell
+  const before = w.credits;
+  shell.slice(1).forEach(c => SM.Sortie._hurt(c, 9999, false));
+  assert.equal(G.cracked, false);
+  const lastCell = shell[0];
+  // the real laser finishes the last cell (the rest of the shell is gone, so the ship sits where it was)
+  w.target = lastCell; w.ship.x = lastCell.x; w.ship.y = lastCell.y; st.settings.autoFire = true;
+  advance(15);
+  assert.equal(lastCell.alive, false, 'laser broke the last shell cell');
+  assert.ok(G.cracked, 'giant cracked');
+  assert.ok(w.credits >= before + G.jackpot, 'jackpot paid');
+  SM.Sortie.end('return');
+  assert.equal(res.giants, 1);
+  assert.equal(res.giantCr, G.jackpot);
+});
+
+test('giant rock: the miner walks in through the hatch and drills the core; the ship cannot enter', () => {
+  const { SM, advance } = game(17);
+  const st = SM.State.get(); st.tutorial = false; st.settings.autoFire = false; st.settings.autopilot = false;
+  st.levels.o2 = 20; // plenty of air for the test
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = []; w.fields = [];
+  const G = w.giants[0], BS = 34;
+  // park outside the hatch and try to fly in
+  w.ship.x = G.hx + G.nx * BS * 2; w.ship.y = G.hy + G.ny * BS * 2;
+  for (let i = 0; i < 40; i++) { w.ship.vx = -G.nx * 300; w.ship.vy = -G.ny * 300; advance(0.05); }
+  const depth = (w.ship.x - G.hx) * G.nx + (w.ship.y - G.hy) * G.ny;
+  assert.ok(depth > BS / 2, `ship stays outside the hatch (${depth.toFixed(0)})`);
+  // go EVA and walk the miner straight in, drilling as it goes
+  w.o2 = w.S.evaO2;
+  w.eva = true; // same as tapping EVA, with the miner placed just outside the hatch
+  w.miner = { x: G.hx + G.nx * BS, y: G.hy + G.ny * BS, vx: 0, vy: 0, a: 0, drilling: false, target: null, reel: false, inv: 0 };
+  st.settings.autoFire = true;
+  const core0 = G.coreLeft;
+  for (let i = 0; i < 300 && G.coreLeft > 0; i++) {
+    // steer toward the nearest core cell still standing
+    const c = G.cells.filter(x => x.part === 'core' && x.alive).sort((a, b) => Math.hypot(a.x - w.miner.x, a.y - w.miner.y) - Math.hypot(b.x - w.miner.x, b.y - w.miner.y))[0];
+    if (!c) break;
+    const dx = c.x - w.miner.x, dy = c.y - w.miner.y, d = Math.hypot(dx, dy) || 1;
+    w.miner.vx = dx / d * 60; w.miner.vy = dy / d * 60;
+    advance(0.5);
+    w.o2 = w.S.evaO2;
+  }
+  assert.ok(G.coreLeft < core0, `miner drilled ${core0 - G.coreLeft} core cells`);
+  assert.ok(Math.abs(w.miner.x - G.x) < G.size * BS / 2 && Math.abs(w.miner.y - G.y) < G.size * BS / 2, 'miner is inside the giant');
+});
+
+test('wide drill head cuts neighbouring cells', () => {
+  const { SM } = game(19);
+  const st = SM.State.get();
+  assert.equal(SM.State.stats().drillSplash, 0);
+  st.levels.bit = 3;
+  assert.equal(SM.State.stats().drillSplash, 0.5);
+  st.levels.bit = 30;
+  assert.equal(SM.State.stats().drillSplash, 1, 'capped at 100%');
 });
