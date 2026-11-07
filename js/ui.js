@@ -23,9 +23,9 @@ SM.UI = (function () {
       const t = e.target.closest('[data-goto]');
       if (t) { SM.Audio.unlock(); SM.Audio.click(); goto(t.dataset.goto); }
     });
-    document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#scr-upgrades .seg button').forEach(b => b.addEventListener('click', () => {
       seg = b.dataset.seg; SM.Audio.click();
-      document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x === b));
+      document.querySelectorAll('#scr-upgrades .seg button').forEach(x => x.classList.toggle('on', x === b));
       renderUpgrades();
     }));
     $('btnSettings').addEventListener('click', () => { SM.Audio.unlock(); SM.Audio.click(); openSettings(); });
@@ -76,6 +76,51 @@ SM.UI = (function () {
     if (screen === 'upgrades') renderUpgrades();
     if (screen === 'regions') renderRegions();
     if (screen === 'contracts') renderContracts();
+    if (screen === 'career') renderCareer();
+    $('crDot').hidden = !careerDot();
+  }
+
+  // ---------- career (rebirth, achievements, collection, cosmetics, leaderboards) ----------
+  let cseg = 'rebirth';
+  const CAREER_SEGS = [['rebirth', 'Rebirth']];
+  function careerDot() { return St.canRebirth() && !St.get().prestige.count; }
+  function renderCareer() {
+    $('careerSeg').innerHTML = CAREER_SEGS.map(([id, n]) => `<button data-cseg="${id}" class="${cseg === id ? 'on' : ''}">${n}</button>`).join('');
+    $('careerSeg').hidden = CAREER_SEGS.length < 2;
+    $('careerSeg').querySelectorAll('[data-cseg]').forEach(b => b.addEventListener('click', () => { cseg = b.dataset.cseg; SM.Audio.click(); renderCareer(); }));
+    const fn = { rebirth: renderRebirth }[cseg];
+    $('careerBody').innerHTML = '';
+    fn && fn($('careerBody'));
+  }
+  function renderRebirth(el) {
+    const s = St.get(), P = s.prestige, PD = D.PRESTIGE;
+    const gain = St.shardsFor(s.lifetime), ok = St.canRebirth();
+    const after = P.shards + gain;
+    const nextAt = PD.base * Math.pow(gain + 1, 2);
+    el.innerHTML = `<h2>Rebirth</h2>
+      <div class="card"><div class="row"><div><div class="label">Core shards</div><div class="big">${P.shards} <span class="small muted">(${P.count} rebirth${P.count === 1 ? '' : 's'})</span></div></div>
+        <div style="text-align:right"><div class="small">All credits <b class="pos">+${Math.round((St.prestigeMult() - 1) * 100)}%</b></div><div class="small">Drone bay <b class="pos">+${Math.round((St.prestigeDroneMult() - 1) * 100)}%</b></div></div></div></div>
+      <div class="card">
+        <p class="small">Start a new life with a permanent bonus. Each core shard adds <b>+${Math.round(PD.creditPer * 100)}%</b> to every credit you earn and <b>+${Math.round(PD.dronePer * 100)}%</b> to the drone bay, forever.</p>
+        <div class="sum"><span>Lifetime credits this life</span><b>${fmt(s.lifetime)} cr</b></div>
+        <div class="sum"><span>Shards from a rebirth now</span><b class="${gain ? 'pos' : ''}">+${gain}</b></div>
+        <div class="sum"><span>Next shard at</span><span>${fmt(nextAt)} cr lifetime</span></div>
+        ${gain ? `<div class="sum"><span>Bonus after rebirth</span><b class="pos">+${Math.round(PD.creditPer * after * 100)}% credits</b></div>` : ''}
+        <p class="small muted"><b>Resets:</b> wallet, upgrades, drone bay level, fields (back to Nearside), escort drones, weapons, automation modules, active contracts, first-survey bonuses (you get them again).<br>
+        <b>Keeps:</b> rank and XP, stars, cosmetics, daily / weekly orders and streak, achievements, collection log, settings, account.</p>
+        <button class="btn ${ok ? 'gold' : 'ghost'}" id="btnRebirth" ${ok ? '' : 'disabled'}>${ok ? `Rebirth for +${gain} shard${gain === 1 ? '' : 's'}` : `Needs ${fmt(PD.minLifetime)} cr lifetime (${fmt(s.lifetime)} so far)`}</button>
+      </div>`;
+    const b = $('btnRebirth');
+    if (ok) b.addEventListener('click', () => {
+      openModal(`<h2>Rebirth?</h2><p>You start again at Nearside with an empty wallet and level 1 upgrades, and gain <b>+${gain} core shard${gain === 1 ? '' : 's'}</b> (all credits +${Math.round(PD.creditPer * after * 100)}%, drone bay +${Math.round(PD.dronePer * after * 100)}%). Your drone bay is collected first. This cannot be undone.</p>
+        <button class="btn gold" id="rbYes">Rebirth</button><button class="btn ghost" id="rbNo">Not yet</button>`);
+      $('rbNo').addEventListener('click', closeModal);
+      $('rbYes').addEventListener('click', () => {
+        const r = St.rebirth(); closeModal();
+        if (r) { SM.Audio.contract(); toast(`Reborn! ${r.shards} core shard${r.shards === 1 ? '' : 's'}: all credits +${Math.round((St.prestigeMult() - 1) * 100)}%`); }
+        goto('home');
+      });
+    });
   }
 
   function affordableAny() {
@@ -101,6 +146,7 @@ SM.UI = (function () {
     return `<details class="formula"><summary>How it's calculated</summary>
       <div class="sum"><span>Drone Lv ${l} base rate</span><span>${fmt(St.droneBaseRate(l))} cr/hr</span></div>
       <div class="sum"><span>x Best field bonus</span><span>x${droneMult()}</span></div>
+      ${St.get().prestige.shards ? `<div class="sum"><span>x Rebirth bonus (${St.get().prestige.shards} core shards)</span><span>x${St.prestigeDroneMult().toFixed(2)}</span></div>` : ''}
       <div class="sum"><span>x Escort wing bonus (${St.get().wing.count} drones x ${Math.round(D.WING.offlineBonus * 100)}%)</span><span>x${(1 + D.WING.offlineBonus * St.get().wing.count).toFixed(2)}</span></div>
       <div class="sum"><span>= Rate</span><b>${fmt(ds.rate)} cr/hr</b></div>
       <div class="sum"><span>Storage = rate x ${ds.capHours}h</span><b>${fmt(ds.cap)} cr</b></div>

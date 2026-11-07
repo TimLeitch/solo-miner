@@ -371,6 +371,13 @@ SM.DATA = (function () {
     },
   };
 
+  // Rebirth (prestige, added 2026-11-07 at Tim's request). Once lifetime credits reach minLifetime you can start over:
+  // upgrades, fields, wallet, escort drones, weapons and modules reset; rank, stars, orders, achievements, cosmetics and
+  // settings stay. You gain core shards = floor(sqrt(lifetime credits this life / base)) and every shard you own adds
+  // creditPer to all credits you earn (blocks, relics, bounties, bonuses, contracts, orders) and dronePer to the drone bay.
+  //   25k -> 1 shard, 100k -> 2, 225k -> 3, 1M -> 6, 4M -> 12
+  const PRESTIGE = { minLifetime: 25000, base: 25000, creditPer: 0.10, dronePer: 0.10 };
+
   // No level caps. Each table above lists the first prices; after the table runs out,
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
@@ -392,5 +399,5 @@ SM.DATA = (function () {
     { id: 'gold',     name: 'Prospector gold', color: '#f2c14e', rank: 8 },
   ];
 
-  return { ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

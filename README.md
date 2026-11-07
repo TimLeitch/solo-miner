@@ -327,6 +327,14 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - Code: `js/meta.js` (orders, counters), numbers in `DATA.ORDERS` (`js/data.js`). Tests: order generation and reset, payment once, streak, old-save migration.
 - **[NEEDS DECISION]** Reward sizes and the streak bonus are my guesses. Should missing a day keep part of the streak instead of resetting it?
 
+### Rebirth / prestige (added 2026-11-07 at Tim's request)
+
+- **[DONE]** New **Career** tab (star icon) with a **Rebirth** page. Once you have earned **25,000 cr lifetime** you can start over for **core shards**: `shards = floor(sqrt(lifetime credits this life / 25,000))` (25k = 1, 100k = 2, 225k = 3, 1M = 6, 4M = 12).
+- **[DONE]** Every core shard you own gives **+10% to all credits** (blocks, relics, bounties, clear bonus, giant jackpots, contracts, orders - it rides on Threat value) and **+10% to the drone bay**. Shown on the Rebirth page and in the drone bay's "How it's calculated".
+- **[DONE]** Resets: wallet, upgrades, drone bay level, fields (back to Nearside), escort drones, weapons, automation modules, active contracts, first-survey bonuses (paid again). The drone bay is collected first. Keeps: rank/XP, stars, cosmetics, orders and streak, achievements, collection log, settings, account. Lifetime credits of earlier lives are kept as `prestige.allTime` (used by the leaderboard).
+- **[DONE]** Confirmation dialog shows the gain; a gold dot on Career when your first rebirth is available. Tunables in `DATA.PRESTIGE`. Test: reset/keep lists, +20% block values and drone rate after 2 shards, save round trip.
+- **[NEEDS DECISION]** Keeping **rank** across rebirths (rank adds laser power, so the second life starts a bit stronger). Reset rank too? And is 25k the right first rebirth point (about when Scrapyard / Glass Moon open)?
+
 ### Accounts and cloud saves (added 2026-11-05 at Tim's request)
 
 Players can make an account (email + password), sign in on any phone or computer, and get their credits, ship, upgrades, drones, weapons, contracts and rank back.

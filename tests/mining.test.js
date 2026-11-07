@@ -747,3 +747,36 @@ test('older saves get meta counters seeded from their stats; drone collection co
   assert.equal(r.credits, 25);
   assert.ok(r.orders.some(o => o.label.startsWith('Daily order')));
 });
+
+test('rebirth: needs lifetime credits, resets the ship, keeps rank and stars, and boosts all credits', () => {
+  const { SM } = game(11);
+  const s = SM.State.get();
+  s.tutorial = false;
+  assert.equal(SM.State.canRebirth(), false);
+  assert.equal(SM.State.rebirth(), null);
+  s.xp = 900;
+  const baseValue = SM.State.threat().value, baseDrone = SM.State.droneRate();
+  s.lifetime = 120000; s.credits = 5000; s.meta.stars = 7;
+  s.levels.laser = 6; s.unlocked.push('comet', 'redshard'); s.region = 'redshard';
+  s.wing.count = 1; s.wing.drones.push({ lv: { wlaser: 1, wcool: 1, wengine: 1 }, weapon: null, gear: null, owned: {} });
+  s.weapons.owned.missile = 2; s.drone.store = 40;
+  assert.equal(SM.State.shardsFor(120000), 2);
+  const r = SM.State.rebirth();
+  assert.deepEqual({ ...r }, { gain: 2, shards: 2 });
+  assert.equal(s.credits, 0); assert.equal(s.lifetime, 0);
+  assert.equal(SM.State.lvl('laser'), 1);
+  assert.deepEqual([...s.unlocked], ['nearside']); assert.equal(s.region, 'nearside');
+  assert.equal(s.wing.count, 0); assert.equal(Object.keys(s.weapons.owned).length, 0);
+  assert.equal(s.xp, 900); assert.equal(s.meta.stars, 7);
+  assert.equal(s.prestige.allTime, 120040, 'drone bay banked first'); assert.equal(SM.State.allTimeCredits(), 120040);
+  assert.ok(Math.abs(SM.State.threat().value / baseValue - 1.2) < 1e-9);
+  assert.ok(Math.abs(SM.State.droneRate() / baseDrone - 1.2) < 1e-9);
+  assert.equal(SM.Meta.counter('rebirths'), 1);
+  // blocks in the next sortie are worth 20% more
+  SM.Sortie.start('nearside');
+  const b = SM.Sortie._debug().blocks.find(x => x.mat === 'rock');
+  assert.equal(b.value, Math.round(SM.DATA.MATERIALS.rock.value * SM.State.threat().value));
+  // survives a save round trip
+  SM.State.replace(SM.State.exportSave());
+  assert.equal(SM.State.get().prestige.shards, 2);
+});

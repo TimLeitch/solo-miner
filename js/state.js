@@ -39,6 +39,7 @@ SM.State = (function () {
       wing: { count: 0, drones: [] },          // escort drones and their loadouts
       tutorial: true,
       meta: freshMeta(),
+      prestige: { shards: 0, count: 0, allTime: 0, best: 0 }, // rebirths: allTime = lifetime credits of earlier lives
       lastSeen: Date.now(),
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
       settings: {
@@ -75,6 +76,7 @@ SM.State = (function () {
     }
     s.weapons = Object.assign({ owned: {}, equipped: null }, parsed.weapons || {});
     s.auto = Object.assign({ lv: {}, on: {} }, parsed.auto || {}); // older saves: nothing bought
+    s.prestige = Object.assign({ shards: 0, count: 0, allTime: 0, best: 0 }, parsed.prestige || {});
     const pm = parsed.meta || {}, fm = freshMeta();
     s.meta = Object.assign(fm, pm);
     ['counters', 'mats', 'fields'].forEach(k => (s.meta[k] = Object.assign({}, pm[k] || {})));
@@ -256,7 +258,31 @@ SM.State = (function () {
     const gear = (laser * (S.wideBeam * 0.5 + S.splitBeam) + (S.gunDps + S.sentries * S.sentryDps * 0.5) / D.BASE.dps) * 0.5;
     const power = laser + wing + weap + gear;
     const t = Math.max(1, power);
-    return { power, level: t, hp: Math.pow(t, D.THREAT.hp), value: Math.pow(t, D.THREAT.value), hazard: Math.pow(t, D.THREAT.hazard) };
+    return { power, level: t, hp: Math.pow(t, D.THREAT.hp), value: Math.pow(t, D.THREAT.value) * prestigeMult(), hazard: Math.pow(t, D.THREAT.hazard) };
+  }
+
+  // ---------- Rebirth (DATA.PRESTIGE) ----------
+  // Every credit source scales with Threat value, so the shard bonus rides on it (see threat()).
+  function prestigeMult() { return 1 + D.PRESTIGE.creditPer * ((s.prestige && s.prestige.shards) || 0); }
+  function prestigeDroneMult() { return 1 + D.PRESTIGE.dronePer * ((s.prestige && s.prestige.shards) || 0); }
+  function shardsFor(lifetime) { return Math.floor(Math.sqrt(Math.max(0, lifetime) / D.PRESTIGE.base)); }
+  function allTimeCredits() { return (s.prestige.allTime || 0) + s.lifetime; }
+  function canRebirth() { return s.lifetime >= D.PRESTIGE.minLifetime && shardsFor(s.lifetime) > 0; }
+  // Start over with a permanent bonus. Banks the drone bay first. Returns { shards gained, total } or null.
+  function rebirth() {
+    if (!canRebirth()) return null;
+    collectDrone();
+    const gain = shardsFor(s.lifetime), keep = fresh();
+    const P = s.prestige;
+    P.allTime = (P.allTime || 0) + s.lifetime; P.best = Math.max(P.best || 0, s.lifetime);
+    P.shards += gain; P.count++;
+    ['credits', 'lifetime', 'levels', 'hull', 'unlocked', 'region', 'weapons', 'auto', 'wing', 'visited', 'lastRun', 'pendingRun']
+      .forEach(k => { if (k in keep) s[k] = keep[k]; else delete s[k]; });
+    s.drone = { store: 0, tick: Date.now() };
+    s.contracts.active = []; s.contracts.refreshedAt = 0; refreshContracts(true);
+    if (SM.Meta) SM.Meta.add('rebirths', 1);
+    save();
+    return { gain, shards: P.shards };
   }
 
   // ---------- Escort wing ----------
@@ -422,7 +448,7 @@ SM.State = (function () {
   function droneRate() { // credits per hour
     const l = lvl('drone');
     const best = Math.max(0, ...s.unlocked.map(id => D.REGIONS.findIndex(r => r.id === id)));
-    return droneBaseRate(l) * D.REGIONS[best].drone * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0));
+    return droneBaseRate(l) * D.REGIONS[best].drone * (1 + D.WING.offlineBonus * (s.wing ? s.wing.count : 0)) * prestigeDroneMult();
   }
   function droneCap() { return droneCapHours(lvl('drone')); }
   function droneCapCredits() { return droneRate() * droneCap(); }
@@ -547,6 +573,7 @@ SM.State = (function () {
     load, save, reset, get, exportSave, progressHash, replace, isFresh, lvl, stats, maxHull, repairCost, rank, rankXp, rankProgress, contractSlots,
     upgradeCost, buy, repair, regionStatus, checkUnlocks, earn,
     tierCost, droneBaseRate, droneCapHours, threat,
+    prestigeMult, prestigeDroneMult, shardsFor, allTimeCredits, canRebirth, rebirth,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     autoDef, autoLvl, autoOn, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
