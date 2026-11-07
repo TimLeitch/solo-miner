@@ -544,11 +544,13 @@ SM.Sortie = (function () {
     const s = w.ship, S = w.S;
     // auto EVA: park at the hatch of a giant rock that still needs hollowing (and wait there while oxygen refills)
     const eg = settings().autoEva ? evaGiant() : null;
-    if (eg) {
-      w.apGoal = null;
-      const p = parkPoint(eg), dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1;
-      const m = Math.max(0, Math.min(1, (d - 3) / 70));
-      return m < 0.05 ? null : avoid(dx / d * m, dy / d * m);
+    if (eg) { w.apGoal = null; return followRoute(eg); }
+    // a giant the miner has hollowed: break its shell first (the jackpot)
+    const og = settings().autoEva && w.giants.find(G => G.open && !G.cracked);
+    if (og && !(w.target && w.target.alive && w.target.giant === og)) {
+      let best = null, bd = Infinity;
+      og.cells.forEach(c => { if (c.alive) { const d = Math.hypot(c.x - s.x, c.y - s.y); if (d < bd) { bd = d; best = c; } } });
+      if (best) { w.target = best; w.apGoal = best; }
     }
     // already have something to shoot? keep mining it while easing in close,
     // so the escort wing (which works blocks near the ship) has more to hit
@@ -577,6 +579,62 @@ SM.Sortie = (function () {
     if (Math.hypot(s.vx, s.vy) < 12 && m > 0.5) { w.apStuck = (w.apStuck || 0) + dt; if (w.apStuck > 1.2) { w.apGoal = null; w.target = nearestBlock(400); w.apStuck = 0; } }
     else w.apStuck = 0;
     return avoid(dx / d * m, dy / d * m);
+  }
+  // Route planning (for auto EVA trips to a giant): cheapest way across the grid in seconds, where an open
+  // cell costs its flying time and a block cell also costs the time the laser needs to cut it.
+  const COLS = Math.ceil(W / BS), ROWS = Math.ceil(H / BS);
+  function planRoute(tx, ty) {
+    const s = w.ship, S = w.S, cellT = BS / S.speed, dps = Math.max(0.1, S.dps);
+    const cl = (v, n) => Math.max(0, Math.min(n - 1, v));
+    const start = cl(Math.floor(s.y / BS), ROWS) * COLS + cl(Math.floor(s.x / BS), COLS);
+    const goal = cl(Math.floor(ty / BS), ROWS) * COLS + cl(Math.floor(tx / BS), COLS);
+    const N = COLS * ROWS, dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1);
+    const hc = [], hi = []; // binary min-heap of (cost, cell)
+    const push = (c, i) => { let k = hc.length; hc.push(c); hi.push(i); while (k) { const p = (k - 1) >> 1; if (hc[p] <= c) break; hc[k] = hc[p]; hi[k] = hi[p]; k = p; } hc[k] = c; hi[k] = i; };
+    const pop = () => { const top = hi[0], c = hc.pop(), i = hi.pop(), n = hc.length; if (n) { let k = 0; for (;;) { let a = 2 * k + 1; if (a >= n) break; if (a + 1 < n && hc[a + 1] < hc[a]) a++; if (hc[a] >= c) break; hc[k] = hc[a]; hi[k] = hi[a]; k = a; } hc[k] = c; hi[k] = i; } return top; };
+    dist[start] = 0; push(0, start);
+    while (hc.length) {
+      const c0 = hc[0], i = pop();
+      if (c0 > dist[i]) continue;
+      if (i === goal) break;
+      const x = i % COLS, y = (i - x) / COLS;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+        const b = w.grid.get(key(nx, ny)); let step = cellT;
+        if (b && b.alive) { if (!shipCan(b)) continue; step += b.hp * M[b.mat].res / dps; }
+        const j = ny * COLS + nx, nc = c0 + step;
+        if (nc < dist[j]) { dist[j] = nc; prev[j] = i; push(nc, j); }
+      }
+    }
+    if (!isFinite(dist[goal])) return null;
+    const cells = [];
+    for (let i = goal; i !== start && i !== -1; i = prev[i]) cells.push({ gx: i % COLS, gy: Math.floor(i / COLS) });
+    return { cells: cells.reverse(), cost: dist[goal] };
+  }
+  // the route to a giant's parking spot, replanned every 2 s (blocks break, the ship drifts)
+  function giantRoute(G) {
+    const R = w.route;
+    if (R && R.giant === G && w.elapsed - R.at < 2) return R;
+    const p = parkPoint(G), r = planRoute(p.x, p.y) || { cells: [], cost: Infinity };
+    return (w.route = Object.assign(r, { giant: G, at: w.elapsed, i: 0 }));
+  }
+  // fly the route; when a block sits on it, aim the laser at that block and wait for it to break
+  function followRoute(G) {
+    const s = w.ship, p = parkPoint(G), R = giantRoute(G);
+    while (R.i < R.cells.length - 1) {
+      const c = R.cells[R.i];
+      if (Math.hypot(c.gx * BS + BS / 2 - s.x, c.gy * BS + BS / 2 - s.y) < BS * 0.6) R.i++; else break;
+    }
+    if (R.i < R.cells.length - 1) {
+      const c = R.cells[R.i], b = w.grid.get(key(c.gx, c.gy));
+      const tx = c.gx * BS + BS / 2, ty = c.gy * BS + BS / 2, dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy) || 1;
+      if (b && b.alive) { w.target = b; return d > BS * 0.9 ? { x: dx / d * 0.5, y: dy / d * 0.5 } : null; }
+      return { x: dx / d, y: dy / d };
+    }
+    const dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1;
+    const m = Math.max(0, Math.min(1, (d - 3) / 70));
+    return m < 0.05 ? null : avoid(dx / d * m, dy / d * m);
   }
   // drift toward a block we're already mining until we're parked right next to it
   function closeIn(b) {
@@ -1190,7 +1248,7 @@ SM.Sortie = (function () {
       const a = autoEvaSteer(dt);
       if (a) { mx = a.x; my = a.y; mag = Math.hypot(mx, my); }
     }
-    if (w.o2 < 8 && !w.warned.o2 && !m.reel) { w.warned.o2 = 1; SM.Audio.alarm(); caption('Oxygen low - head back to the ship', 'warn'); }
+    if (w.o2 < 8 && !w.warned.o2 && !m.reel && !m.auto) { w.warned.o2 = 1; SM.Audio.alarm(); caption('Oxygen low - head back to the ship', 'warn'); }
     let tvx, tvy;
     if (m.reel) {
       const dx = s.x - m.x, dy = s.y - m.y, d = Math.hypot(dx, dy) || 1;
@@ -1261,10 +1319,11 @@ SM.Sortie = (function () {
       if (G.started) { if (w.time < 8) continue; }
       else {
         let hp = 0; G.cells.forEach(c => { if (c.alive && c.part === 'core') hp += c.hp; });
-        const secs = hp / Math.max(0.1, S.drillDps * (1 + 2 * (S.drillSplash || 0))) * 1.6; // x1.6 for oxygen refills
+        const secs = G.digEst = hp / Math.max(0.1, S.drillDps * (1 + 2 * (S.drillSplash || 0))) * 1.6; // x1.6 for oxygen refills
         if (secs > w.time - 10) continue;
       }
       const d = Math.hypot(G.hx - s.x, G.hy - s.y);
+      if (!G.started && d < bd && w.route && w.route.giant === G && w.route.cost * 1.3 + G.digEst > w.time - 10) continue; // too far to get there in time
       if (d < bd) { bd = d; best = G; }
     }
     return best;
@@ -1297,7 +1356,7 @@ SM.Sortie = (function () {
   // steering vector for the miner, or null to hold still (it may also start the reel home)
   function autoEvaSteer(dt) {
     const m = w.miner, s = w.ship, job = m.job;
-    const home = Math.hypot(s.x - m.x, s.y - m.y) / EVA_REEL_SPEED + 3; // seconds of oxygen the trip home needs, plus margin
+    const home = Math.hypot(s.x - m.x, s.y - m.y) / EVA_REEL_SPEED + 5; // seconds of oxygen the trip home needs, plus margin (no alarm on auto)
     if (w.o2 < home) {
       if (job.relic) job.relic.evaSkip = true; // couldn't reach it on one tank: don't keep trying
       m.reel = true; caption('Auto EVA: reeling in to refill oxygen'); return null;
@@ -1321,10 +1380,10 @@ SM.Sortie = (function () {
       }
     } else {
       if (!job.relic || !job.relic.alive || job.relic.evaSkip) { job.relic = evaRelic(m); job.stuck = 0; }
-      if (!job.relic) { m.reel = true; caption('Auto EVA: all relics in reach collected'); return null; }
+      if (!job.relic) { m.reel = true; caption(job.blocked ? 'Auto EVA: relic blocked by rock - back aboard' : 'Auto EVA: all relics in reach collected'); return null; }
       goal = job.relic;
       // walking into a wall? give up on this relic after 2 s and try the next one
-      if (Math.hypot(m.vx, m.vy) < 12) { job.stuck = (job.stuck || 0) + dt; if (job.stuck > 2) { job.relic.evaSkip = true; job.relic = null; return null; } }
+      if (Math.hypot(m.vx, m.vy) < 12) { job.stuck = (job.stuck || 0) + dt; if (job.stuck > 2) { job.relic.evaSkip = true; job.relic = null; job.blocked = true; return null; } }
       else job.stuck = 0;
     }
     if (!goal) { m.reel = true; return null; }
@@ -2302,5 +2361,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), clearBonus };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, _debug: () => w, _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
 })();
