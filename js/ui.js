@@ -421,7 +421,7 @@ SM.UI = (function () {
         eva: l => `Speed ${Math.round(D.EVA.speed * (1 + 0.15 * (l - 1)))}`,
         o2: l => `Oxygen ${Math.round(D.EVA.o2 * (1 + 0.25 * (l - 1)))}s`,
         drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1)) * (1 + D.RANK_POWER * (St.rank() - 1))).toFixed(1)} dmg/s (ignores resistance)`,
-        bit: l => { const [a, b] = St.shareTiers(D.MINER.find(x => x.id === 'bit').per, l - 1);
+        bit: l => { if (l < 2) return 'Not fitted: the drill cuts only its target'; const [a, b] = St.shareTiers(D.MINER.find(x => x.id === 'bit').per, l - 1);
           return `Also cuts the 4 side cells at ${Math.round(a * 100)}%` + (b > 0 ? ` and the 4 diagonals at ${Math.round(b * 100)}%` : '') + ' power'; },
       };
       ['eva', 'o2', 'drill', 'bit'].forEach(id => {
@@ -549,7 +549,8 @@ SM.UI = (function () {
     if (id === 'fcs') {
       if (!l) return `Fires at most every ${A.fcsDelay.toFixed(1)}s`;
       const dmg = k => St.fcsBonus(k) > 1 ? `, weapon damage +${Math.round((St.fcsBonus(k) - 1) * 100)}%` : '';
-      return `Auto-shot every ${St.fcsDelay(l).toFixed(1)}s${dmg(l)} &rarr; <b>${St.fcsDelay(nx).toFixed(1)}s${dmg(nx) || ''}</b>`;
+      const sec = k => { const d = St.fcsDelay(k); return d < 1 ? d.toFixed(2) : d.toFixed(1); };
+      return `Auto-shot every ${sec(l)}s${dmg(l)} &rarr; <b>${sec(nx)}s${dmg(nx)}</b>`;
     }
     if (id === 'loader') return l ? `Reloads ${Math.round((1 - Math.pow(A.loaderStep, l - 1)) * 100)}% cheaper &rarr; <b>${Math.round((1 - Math.pow(A.loaderStep, l)) * 100)}%</b>` : 'Auto-buys from sortie credits only';
     if (id === 'racks') return `Extra ammo per weapon: +${l}` + ` &rarr; <b>+${nx}</b>`;
