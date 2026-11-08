@@ -552,7 +552,7 @@ SM.UI = (function () {
     const s = St.get();
     let html = `<h3>Ship automation</h3>`;
     if (!D.WEAPONS.some(d => St.weaponLvl(d.id))) return html + `<div class="card small muted">Buy a secondary weapon first. Automation modules then fire it, swap it and keep it loaded for you.</div>`;
-    html += `<div class="card small muted">Modules that use your weapons for you. Switch any of them off here at any time; the fire-control computer also has a <b>WPN</b> auto switch in the sortie controls (key H). Auto-shots skip the tutorial and spacewalks.</div>`;
+    html += `<div class="card small muted">Modules that use your weapons for you. Switch any of them off here at any time; the fire-control computer also has a <b>WPN</b> auto switch in the sortie controls (key H). Auto-shots skip the tutorial. They keep firing while you're on a spacewalk (the ship holds still, so it never leaves tether range).</div>`;
     D.AUTO.modules.forEach(m => {
       const l = St.autoLvl(m.id), cost = St.autoCost(m.id), can = cost != null && s.credits >= cost, on = St.autoOn(m.id);
       const lvTag = l ? (m.max === 1 ? '<span class="tag blue">OWNED</span>' : `<span class="small muted">Lv ${l}</span>`) : '<span class="tag grey">LOCKED</span>';

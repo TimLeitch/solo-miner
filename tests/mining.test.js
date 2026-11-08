@@ -968,3 +968,23 @@ test('welcome back: a full bin still reports after an hour away, with the hours 
   s.lastSeen = now - 30 * 60000; // half an hour, bin full: no report
   assert.equal(SM.State.collectOffline(now), null);
 });
+
+test('the ship keeps shooting during a spacewalk but stays where it is', () => {
+  const { SM, advance } = game(19);
+  const st = SM.State.get(); st.tutorial = false;
+  Object.assign(st.settings, { autoFire: true, autopilot: true, autoEva: false });
+  st.levels.minigun = 3;
+  SM.Sortie.start('nearside');
+  const w = SM.Sortie._debug();
+  w.debris = []; w.fields = []; w.time = 1e4;
+  advance(6); // fly to a block and start mining
+  const x0 = w.ship.x, y0 = w.ship.y, broke0 = w.broken;
+  SM.Sortie._eva();
+  assert.ok(w.eva, 'miner is out');
+  let fired = false;
+  for (let i = 0; i < 200 && w.eva; i++) { advance(0.05); if (w.firing || w.gunTarget) fired = true; w.o2 = w.S.evaO2; }
+  assert.ok(w.eva, 'still out');
+  assert.ok(fired, 'laser or guns fired while the miner was out');
+  assert.ok(w.broken > broke0, `ship broke blocks during the spacewalk (${w.broken - broke0})`);
+  assert.ok(Math.hypot(w.ship.x - x0, w.ship.y - y0) < 5, 'ship held its position');
+});

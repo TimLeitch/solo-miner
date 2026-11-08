@@ -748,7 +748,8 @@ SM.Sortie = (function () {
 
     // targeting
     if (w.target && !w.target.alive) w.target = null;
-    const wantFire = w.wantFire = !w.eva && (input.mine || settings().autoFire);
+    // the ship keeps shooting while the miner is out (it holds position, so it never leaves tether range)
+    const wantFire = w.wantFire = input.mine || settings().autoFire;
     // scavengers in range jump the queue: every second they live they are eating your field
     if (wantFire && settings().aimAssist && w.foes.length && !(w.target && w.target.foe)) {
       const f = nearestFoe(s.x, s.y, S.range); if (f) w.target = f;
@@ -1789,7 +1790,7 @@ SM.Sortie = (function () {
       if (purchaseShot(w.weapon, St.reloadCost(w.weapon), true)) w.autoLoads++;
     }
     // fire-control computer
-    if (!St.autoOn('fcs') || w.autoCd > 0 || w.eva || w.wcd > 0) return;
+    if (!St.autoOn('fcs') || w.autoCd > 0 || w.wcd > 0) return;
     // every loaded weapon is considered; the best-fitting shot wins (ties go to the weapon with more ammo left)
     const ids = D.WEAPONS.map(x => x.id).filter(loaded);
     let best = null, bestScore = 1;
@@ -1847,7 +1848,7 @@ SM.Sortie = (function () {
     }
     // twin miniguns: fire with the laser, never overheat. Scavengers first, then the laser's target, then the nearest block.
     w.gunTarget = null;
-    if (S.gunDps > 0 && w.wantFire && !w.eva) {
+    if (S.gunDps > 0 && w.wantFire) {
       const range = S.range * G.minigun.range;
       let t = nearestFoe(s.x, s.y, range);
       if (!t && w.target && w.target.alive && shipCan(w.target) && Math.hypot(w.target.x - s.x, w.target.y - s.y) <= range) t = w.target;
@@ -2598,5 +2599,5 @@ SM.Sortie = (function () {
     }
   }
 
-  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, drawHull, _debug: () => w, _event: kind => w && startEvent(kind), _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), clearBonus };
+  return { init, start, end, pause, isRunning, isPaused, snapshot, applyLayout, drawHull, _debug: () => w, _event: kind => w && startEvent(kind), _advance: () => w && advanceWorld(), _hurt: (b, d, drill) => hurtBlock(b, d, true, drill), _route: (x, y) => planRoute(x, y), _eva: () => toggleEva(), clearBonus };
 })();
