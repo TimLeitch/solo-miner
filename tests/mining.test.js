@@ -1027,3 +1027,25 @@ test('wide beam diagonals and the third split beam actually cut blocks', () => {
   assert.ok(diags.length && diags.every(c => c.hp < c.maxHp), 'diagonals burn');
   assert.ok(w.splitTarget2 && w.splitTarget2 !== w.splitTarget && w.splitTarget2.hp < w.splitTarget2.maxHp, 'third beam cuts');
 });
+
+test('auto upgrade list: items can be switched off or put first, and the buyer obeys it', () => {
+  const { SM } = game(7);
+  const st = SM.State.get();
+  st.credits = 5000; st.settings.autoUpgrade = true;
+  const list0 = SM.State.autoUpgradeList();
+  assert.ok(list0.length > 5 && list0.every(r => r.next.cost > 0), 'list shows each upgrade with its next price');
+  // switch the laser off: it leaves the queue, sits at the bottom of the list, and is never bought
+  SM.State.toggleAutoUpgradeGroup('laser', 'skip');
+  assert.ok(!SM.State.autoUpgradeOptions().some(o => o.group === 'laser'));
+  assert.equal(SM.State.autoUpgradeList().at(-1).group, 'laser');
+  const lv = st.levels.laser;
+  SM.State.autoUpgrade();
+  assert.equal(st.levels.laser, lv, 'switched-off upgrade not bought');
+  // star the oxygen tank: it goes to the front
+  SM.State.toggleAutoUpgradeGroup('o2', 'first');
+  assert.equal(SM.State.autoUpgradeOptions()[0].group, 'o2');
+  assert.equal(SM.State.autoUpgradeList()[0].group, 'o2');
+  // switching it back on works
+  SM.State.toggleAutoUpgradeGroup('laser', 'skip');
+  assert.ok(SM.State.autoUpgradeOptions().some(o => o.group === 'laser'));
+});

@@ -71,7 +71,7 @@ SM.UI = (function () {
     $('upDot').hidden = !affordableAny();
     if (SM.Cloud) SM.Cloud.refreshUi();
     $('ctDot').hidden = !(s.stats.sorties >= 1 && s.contracts.active.length < St.contractSlots() && s.contracts.offers.length);
-    if (screen === 'home') renderHome();
+    if (screen === 'home') { renderHome(); renderHomeAutoUp(); }
     if (screen === 'upgrades') renderUpgrades();
     if (screen === 'regions') renderRegions();
     if (screen === 'contracts') renderContracts();
@@ -344,6 +344,7 @@ SM.UI = (function () {
   // Runs every second in the hangar (never during a sortie) and spends whatever new credits came in.
   function runAutoUpgrade() {
     if (document.body.classList.contains('in-sortie')) return false;
+    if (!$('modal').hidden) return false; // wait until the sortie summary (or any dialog) is closed, so you can switch it off first
     const r = St.autoUpgrade();
     if (!r.bought.length) return false;
     SM.Audio.buy();
@@ -361,13 +362,39 @@ SM.UI = (function () {
     const status = !on ? 'Off. Turn it on and the hangar buys upgrades for you as credits come in.'
       : next ? `Next: <b>${esc(next.name)} Lv ${next.lv}</b> (${fmt(next.cost)} cr)${reserve > 0 ? ` - keeping ${fmt(reserve)} cr for repairs` : ''}`
       : 'Everything it can buy is maxed out.';
+    const rows = St.autoUpgradeList(), offN = rows.filter(r => r.skipped).length;
     el.innerHTML = `<label class="setting"><span><b>Auto upgrade</b><br><span class="small muted">${status}</span></span>
-      <input type="checkbox" class="switch" id="autoUpTgl" ${on ? 'checked' : ''} aria-label="Auto upgrade"></label>`;
-    $('autoUpTgl').addEventListener('change', e => {
-      s.settings.autoUpgrade = e.target.checked; St.save(); SM.Audio.click();
-      toast(`Auto upgrade ${s.settings.autoUpgrade ? 'on' : 'off'}`);
-      if (!runAutoUpgrade()) render();
-    });
+      <input type="checkbox" class="switch" id="autoUpTgl" ${on ? 'checked' : ''} aria-label="Auto upgrade"></label>
+      <details id="autoUpList" ${autoUpListOpen ? 'open' : ''}><summary class="small">Auto upgrade list: ${rows.length - offN} on${offN ? `, ${offN} off` : ''} (tap to see and edit)</summary>
+        <div class="small muted" style="margin:6px 0">In buying order. <b>OFF</b> takes an upgrade off the list; <b>&#9733;</b> buys it before everything else. Buying a new drone, weapon or module adds it here.</div>
+        ${rows.map((r, i) => `<div class="row au-row" style="gap:6px;padding:4px 0;border-top:1px solid #fff1;${r.skipped ? 'opacity:.5' : ''}">
+          <div style="flex:1;min-width:0"><b>${r.skipped ? '' : (i + 1) + '. '}${esc(r.name)}</b><div class="small muted">Next: Lv ${r.next.lv} - ${fmt(r.next.cost)} cr</div></div>
+          <button class="btn ${r.first ? '' : 'ghost'} small-btn" data-aufirst="${esc(r.group)}" aria-pressed="${r.first}" title="Buy first">&#9733;</button>
+          <button class="btn ${r.skipped ? 'ghost' : ''} small-btn" data-auskip="${esc(r.group)}" aria-pressed="${!r.skipped}">${r.skipped ? 'OFF' : 'ON'}</button>
+        </div>`).join('') || '<div class="small muted">Nothing to buy yet.</div>'}
+      </details>`;
+    $('autoUpTgl').addEventListener('change', e => setAutoUpgrade(e.target.checked));
+    $('autoUpList').addEventListener('toggle', e => { autoUpListOpen = e.target.open; });
+    el.querySelectorAll('[data-auskip]').forEach(b => b.addEventListener('click', () => { St.toggleAutoUpgradeGroup(b.dataset.auskip, 'skip'); SM.Audio.click(); render(); }));
+    el.querySelectorAll('[data-aufirst]').forEach(b => b.addEventListener('click', () => { St.toggleAutoUpgradeGroup(b.dataset.aufirst, 'first'); SM.Audio.click(); render(); }));
+  }
+  let autoUpListOpen = false;
+  function setAutoUpgrade(on) {
+    const s = St.get();
+    s.settings.autoUpgrade = !!on; St.save(); SM.Audio.click();
+    toast(`Auto upgrade ${s.settings.autoUpgrade ? 'on' : 'off'}`);
+    if (!runAutoUpgrade()) render();
+  }
+  // hangar home: status, the next few buys, a big on/off button and a link to the editable list
+  function renderHomeAutoUp() {
+    const el = $('homeAutoUp'); if (!el) return;
+    const s = St.get(), on = !!s.settings.autoUpgrade, next = St.autoUpgradeOptions().slice(0, 3);
+    el.innerHTML = `<div class="row"><div><div class="label">Auto upgrade</div><div class="big">${on ? 'ON' : 'OFF'}</div></div>
+        <button class="btn ${on ? '' : 'ghost'} small-btn" id="homeAutoUpTgl">${on ? 'Turn off' : 'Turn on'}</button></div>
+      <div class="small muted" style="margin-top:6px">${next.length ? 'Next: ' + next.map(o => `${esc(o.name)} Lv ${o.lv} (${fmt(o.cost)} cr)`).join(', ') : 'Nothing on the list to buy.'}</div>
+      <button class="btn ghost small-btn" data-goto="upgrades" id="homeAutoUpEdit" style="margin-top:6px">Edit list</button>`;
+    $('homeAutoUpTgl').addEventListener('click', () => setAutoUpgrade(!on));
+    $('homeAutoUpEdit').addEventListener('click', () => { autoUpListOpen = true; });
   }
 
   function renderUpgrades() {

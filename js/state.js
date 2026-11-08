@@ -46,7 +46,7 @@ SM.State = (function () {
       drone: { store: 0, tick: Date.now() }, // offline/idle drone storage
       settings: {
         volume: 0.6, vibration: true, shake: true, reducedFx: false,
-        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, autoEva: true, autoUpgrade: false, leftHanded: false,
+        aimAssist: true, autoFire: true, autoBoost: false, autopilot: true, autoEva: true, autoUpgrade: false, autoUpSkip: {}, autoUpFirst: {}, leftHanded: false,
         highContrast: false, uiScale: 1, stickOpacity: 0.5, captions: true,
       },
     };
@@ -383,29 +383,55 @@ SM.State = (function () {
   }
   function toggleAuto(id, on) { if (!autoLvl(id)) return; s.auto.on[id] = on == null ? !autoOn(id) : !!on; save(); }
   // ---------- Auto upgrade (settings.autoUpgrade, DATA.AUTO_UPGRADE) ----------
-  // Every upgrade the auto buyer may pick right now: { key, name, level after buying, cost, score, buy() }.
-  function autoUpgradeOptions() {
+  // Every upgrade the auto buyer may pick right now: { key, group, gname, name, level after buying, cost, score, buy() }.
+  // `group` is what the player edits on the auto upgrade list (all escort drones share one group per upgrade).
+  // Groups switched off on the list (settings.autoUpSkip) are left out unless `all`; groups marked first
+  // (settings.autoUpFirst) jump the queue.
+  function autoUpgradeOptions(all) {
     const A = D.AUTO_UPGRADE, w = k => A.weights[k] != null ? A.weights[k] : A.defaultWeight;
+    const skip = s.settings.autoUpSkip || {}, first = s.settings.autoUpFirst || {};
     const out = [];
+    const add = (o, g, gname) => {
+      if (!all && skip[g]) return;
+      o.group = g; o.gname = gname; o.skipped = !!skip[g]; o.first = !!first[g];
+      if (o.first) o.score *= 0.001;
+      out.push(o);
+    };
     [...D.SHUTTLE, ...D.MINER, { id: 'drone', name: 'Mining drone bay' }, { id: 'silo', name: D.SILO.name }].forEach(u => {
       const c = upgradeCost(u.id);
-      if (c != null) out.push({ key: u.id, name: u.name, lv: lvl(u.id) + 1, cost: c, score: c * w(u.id), buy: () => buy(u.id) });
+      if (c != null) add({ key: u.id, name: u.name, lv: lvl(u.id) + 1, cost: c, score: c * w(u.id), buy: () => buy(u.id) }, u.id, u.name);
     });
     s.wing.drones.forEach((d, i) => D.WING.upgrades.forEach(u => {
       const c = droneUpCost(i, u.id);
-      if (c != null) out.push({ key: `wing${i}.${u.id}`, name: `${u.name} (drone ${i + 1})`, lv: d.lv[u.id] + 1, cost: c, score: c * w('wingDrone'), buy: () => buyDroneUp(i, u.id) });
+      if (c != null) add({ key: `wing${i}.${u.id}`, name: `${u.name} (drone ${i + 1})`, lv: d.lv[u.id] + 1, cost: c, score: c * w('wingDrone'), buy: () => buyDroneUp(i, u.id) }, 'wing.' + u.id, `${u.name} (escort drones)`);
     }));
     D.WEAPONS.forEach(d => {
       if (!weaponLvl(d.id)) return; // never buys a new weapon
       const c = weaponCost(d.id);
-      if (c != null) out.push({ key: 'w.' + d.id, name: d.name, lv: weaponLvl(d.id) + 1, cost: c, score: c * w('weapon'), buy: () => buyWeapon(d.id) });
+      if (c != null) add({ key: 'w.' + d.id, name: d.name, lv: weaponLvl(d.id) + 1, cost: c, score: c * w('weapon'), buy: () => buyWeapon(d.id) }, 'w.' + d.id, d.name);
     });
     D.AUTO.modules.forEach(m => {
       if (!autoLvl(m.id)) return; // never buys a new module
       const c = autoCost(m.id);
-      if (c != null) out.push({ key: 'a.' + m.id, name: m.name, lv: autoLvl(m.id) + 1, cost: c, score: c * w('module'), buy: () => buyAuto(m.id) });
+      if (c != null) add({ key: 'a.' + m.id, name: m.name, lv: autoLvl(m.id) + 1, cost: c, score: c * w('module'), buy: () => buyAuto(m.id) }, 'a.' + m.id, m.name);
     });
     return out.sort((a, b) => a.score - b.score);
+  }
+  // The editable auto upgrade list: one row per group in buying order (switched-off groups last), with its next purchase.
+  function autoUpgradeList() {
+    const seen = new Map();
+    autoUpgradeOptions(true).forEach(o => { if (!seen.has(o.group)) seen.set(o.group, { group: o.group, name: o.gname, next: o, skipped: o.skipped, first: o.first }); });
+    const rows = [...seen.values()];
+    return rows.filter(r => !r.skipped).concat(rows.filter(r => r.skipped));
+  }
+  // Flip a group's 'skip' (leave off the list) or 'first' (buy before everything else) mark.
+  function toggleAutoUpgradeGroup(group, kind) {
+    const k = kind === 'first' ? 'autoUpFirst' : 'autoUpSkip';
+    const m = s.settings[k] = s.settings[k] || {};
+    if (m[group]) delete m[group]; else m[group] = true;
+    if (kind === 'first' && m[group] && s.settings.autoUpSkip) delete s.settings.autoUpSkip[group]; // first implies on
+    if (kind !== 'first' && m[group] && s.settings.autoUpFirst) delete s.settings.autoUpFirst[group];
+    save();
   }
   // Credits the auto buyer leaves alone (enough to fully repair the hull).
   function autoUpgradeReserve() { return D.AUTO_UPGRADE.reserveRepair ? repairCost() : 0; }
@@ -591,7 +617,7 @@ SM.State = (function () {
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
     autoDef, autoLvl, autoOn, fcsBonus, fcsCapLevel, shareTiers, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
-    autoUpgradeOptions, autoUpgradeReserve, autoUpgrade,
+    autoUpgradeOptions, autoUpgradeReserve, autoUpgrade, autoUpgradeList, toggleAutoUpgradeGroup,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,
   };

@@ -292,6 +292,15 @@ Tim: "So as they're getting money and collecting things, they can turn on auto u
 - **[NEEDS DECISION]** **New purchases:** it never buys a new escort drone, a new secondary weapon, a new automation module or a drone module (those felt like your choices and are big spends). Should it buy those too?
 - **[NEEDS DECISION]** **Off by default** (spending is not undoable). Turn it on by default for new players instead? And are the weights right (e.g. should it favour the drone bay more for offline gains)?
 
+
+**See it, edit it, stop it (changed 2026-11-08 at Tim's request: "you can't turn that off when it's going through a large field... should be on a list that you can see and edit... and an auto upgrade off button")**
+
+- **[DONE]** **Hangar home** has an *Auto upgrade* card: ON/OFF, a big **Turn off / Turn on** button, the next 3 things it will buy with prices, and **Edit list**.
+- **[DONE]** **Editable list** (Upgrades screen, under the switch, "Auto upgrade list"): every upgrade it may buy, in buying order, with its next level and price. **ON/OFF** per row takes an upgrade off the list (it moves to the bottom, greyed); **★** puts it at the front of the queue. All escort drones share one row per upgrade. Saved with your settings (`settings.autoUpSkip`, `settings.autoUpFirst`), so it syncs with cloud saves.
+- **[DONE]** **Pause menu** during a sortie has an *Auto upgrade: ON/OFF* button, so you can switch it off mid-field before a big payout lands.
+- **[DONE]** It no longer spends while the sortie summary (or any dialog) is open; it waits until you close it and are back in the hangar.
+- **[DONE]** Tests: switched-off rows are never bought, ★ rows go first, switching back on works (52 pass). Checked the hangar card, the list and the pause button in Chromium at phone size, no errors.
+
 ### Ship weapons & systems: wide beam, miniguns, sentries and more (added 2026-11-07 at Tim's request)
 
 Tim: "a widening of the laser, kind of like the miner has the widening ... some miniguns, some sentries, about 5 or 6 new upgrades to the ship that will make it even better and stronger."

@@ -342,10 +342,16 @@ SM.Sortie = (function () {
     tw.querySelector('small').textContent = fcs ? 'AUTO ON' : 'AUTO OFF';
   }
 
+  // auto upgrade can be switched from the pause menu, so a big field's payout isn't spent before you're back
+  function pauseAutoUpUi() {
+    const on = !!SM.State.get().settings.autoUpgrade, b = $('btnPauseAutoUp');
+    b.textContent = `Auto upgrade: ${on ? 'ON' : 'OFF'}`; b.classList.toggle('ghost', !on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   function pause(on) {
     if (!running) return;
     paused = on;
     $('pauseMenu').hidden = !on;
+    if (on) pauseAutoUpUi();
     input.mine = false; input.boost = false; input.stick = null;
     SM.Audio.laser(false);
     if (!on) lastT = performance.now();
@@ -466,6 +472,9 @@ SM.Sortie = (function () {
     $('btnReturn').addEventListener('click', () => { SM.Audio.click(); end('return'); });
     $('btnPause').addEventListener('click', () => { SM.Audio.click(); pause(true); });
     $('btnResume').addEventListener('click', () => { SM.Audio.click(); pause(false); });
+    $('btnPauseAutoUp').addEventListener('click', () => {
+      SM.Audio.click(); const st = SM.State.get().settings; st.autoUpgrade = !st.autoUpgrade; SM.State.save(); pauseAutoUpUi();
+    });
     $('btnPauseReturn').addEventListener('click', () => { SM.Audio.click(); paused = false; end('return'); });
 
     window.addEventListener('keydown', e => {
