@@ -163,9 +163,15 @@ SM.State = (function () {
       evaSpeed: D.EVA.speed * (1 + 0.15 * (lvl('eva') - 1)),
       evaO2: D.EVA.o2 * (1 + 0.25 * (lvl('o2') - 1)),
       drillDps: D.EVA.drillDps * (1 + 0.30 * (lvl('drill') - 1)) * rankPower,
-      drillSplash: Math.min(1, D.MINER.find(u => u.id === 'bit').per * (lvl('bit') - 1)), // wide drill head: side cut share
+      ...(t => ({ drillSplash: t[0], drillDiag: t[1] }))(shareTiers(D.MINER.find(u => u.id === 'bit').per, lvl('bit') - 1)), // wide drill head: side / diagonal cut share
       ...gearStats(rankPower),
     };
+  }
+  // [tier 1, tier 2] shares for `bought` levels of a share upgrade (see DATA.OVERCAP)
+  function shareTiers(per, bought) {
+    if (bought <= 0) return [0, 0];
+    const n = Math.ceil(1 / per - 1e-9), over = 1 + D.OVERCAP * Math.max(0, bought - 2 * n);
+    return [Math.min(1, per * bought) * over, Math.max(0, Math.min(1, per * (bought - n))) * over];
   }
   // Ship weapons & systems (DATA.SHIP_GEAR). Level 1 = not fitted: every value is 0 until the first purchase.
   function gearStats(rankPower) {
@@ -173,8 +179,8 @@ SM.State = (function () {
     const L = id => lvl(id) - 1; // levels bought
     const grow = (id, k) => L(id) > 0 ? (1 + k * (L(id) - 1)) * rankPower : 0;
     return {
-      wideBeam: Math.min(G.wide.max, per('wide') * L('wide')),
-      splitBeam: Math.min(G.split.max, per('split') * L('split')),
+      ...(t => ({ wideBeam: t[0], wideDiag: t[1] }))(shareTiers(per('wide'), L('wide'))),
+      ...(t => ({ splitBeam: t[0], splitBeam2: t[1] }))(shareTiers(per('split'), L('split'))),
       gunDps: G.minigun.dps * grow('minigun', G.minigun.perLevel),
       sentries: L('sentry'),
       sentryDps: G.sentry.dps * grow('sentry', G.sentry.perLevel),
@@ -262,7 +268,7 @@ SM.State = (function () {
     const weap = Object.values(s.weapons.owned).reduce((a, l) => a + (l || 0), 0) * 0.1;
     // ship weapons (DATA.SHIP_GEAR) count as extra laser power at half weight, like the wing. Within that, side burn and
     // sentries count half again (not every target has 4 neighbours; sentries sit still). Point defence and deflector don't count.
-    const gear = (laser * (S.wideBeam * 0.5 + S.splitBeam) + (S.gunDps + S.sentries * S.sentryDps * 0.5) / D.BASE.dps) * 0.5;
+    const gear = (laser * (S.wideBeam * 0.5 + (S.wideDiag || 0) * 0.25 + S.splitBeam + (S.splitBeam2 || 0)) + (S.gunDps + S.sentries * S.sentryDps * 0.5) / D.BASE.dps) * 0.5;
     const power = laser + wing + weap + gear;
     const t = Math.max(1, power);
     return { power, level: t, hp: Math.pow(t, D.THREAT.hp), value: Math.pow(t, D.THREAT.value) * prestigeMult(), hazard: Math.pow(t, D.THREAT.hazard) };
@@ -346,7 +352,7 @@ SM.State = (function () {
   function weaponLvl(id) { return s.weapons.owned[id] || 0; }
   function weaponStats(id, lv) {
     const d = weaponDef(id); lv = lv || weaponLvl(id) || 1;
-    return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1) + autoLvl('racks'), radius: d.radius, range: d.range };
+    return { dmg: d.dmg * (1 + D.WEAPON_LEVEL.dmg * (lv - 1)) * fcsBonus(), ammo: d.ammo + D.WEAPON_LEVEL.ammo * (lv - 1) + autoLvl('racks'), radius: d.radius, range: d.range };
   }
   function weaponCost(id) { const l = weaponLvl(id), d = weaponDef(id); return tierCost(d.costs, l); }
   function buyWeapon(id) {
@@ -361,6 +367,9 @@ SM.State = (function () {
   function equipWeapon(id) { if (weaponLvl(id)) { s.weapons.equipped = id; save(); } }
 
   // ---------- Ship automation (DATA.AUTO) ----------
+  // fire-control levels past the delay floor: +fcsOver weapon damage each
+  function fcsCapLevel() { const A = D.AUTO; return Math.ceil(1 + Math.log(A.fcsMin / A.fcsDelay) / Math.log(A.fcsStep)); } // first level at the floor (9)
+  function fcsBonus(l) { l = l == null ? autoLvl('fcs') : l; return 1 + D.AUTO.fcsOver * Math.max(0, l - fcsCapLevel() + 1); }
   function autoDef(id) { return D.AUTO.modules.find(m => m.id === id); }
   function autoLvl(id) { return (s.auto && s.auto.lv[id]) || 0; }           // 0 = not bought
   function autoOn(id) { return autoLvl(id) > 0 && s.auto.on[id] !== false; } // owned and switched on
@@ -378,9 +387,7 @@ SM.State = (function () {
   function autoUpgradeOptions() {
     const A = D.AUTO_UPGRADE, w = k => A.weights[k] != null ? A.weights[k] : A.defaultWeight;
     const out = [];
-    const capped = { wide: D.SHIP_GEAR.wide.max, split: D.SHIP_GEAR.split.max, bit: 1 }; // side burn / second beam / side cut stop at 100%
     [...D.SHUTTLE, ...D.MINER, { id: 'drone', name: 'Mining drone bay' }, { id: 'silo', name: D.SILO.name }].forEach(u => {
-      if (capped[u.id] != null && u.per * (lvl(u.id) - 1) >= capped[u.id]) return;
       const c = upgradeCost(u.id);
       if (c != null) out.push({ key: u.id, name: u.name, lv: lvl(u.id) + 1, cost: c, score: c * w(u.id), buy: () => buy(u.id) });
     });
@@ -583,7 +590,7 @@ SM.State = (function () {
     prestigeMult, prestigeDroneMult, shardsFor, allTimeCredits, canRebirth, rebirth,
     wingCost, buyWingDrone, droneStats, droneUpCost, buyDroneUp, moduleDef, moduleSlot, droneModule, droneAffordable,
     weaponDef, weaponLvl, weaponStats, weaponCost, buyWeapon, equipWeapon,
-    autoDef, autoLvl, autoOn, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
+    autoDef, autoLvl, autoOn, fcsBonus, fcsCapLevel, shareTiers, autoCost, buyAuto, toggleAuto, reloadCost, fcsDelay,
     autoUpgradeOptions, autoUpgradeReserve, autoUpgrade,
     droneRate, droneCap, droneCapCredits, droneStatus, collectDrone, collectOffline, accrue,
     refreshContracts, nextRefreshMs, acceptContract, abandonContract, applyContracts,

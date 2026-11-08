@@ -103,7 +103,7 @@ Tim asked for "auto action use" plus upgrades for buying ammo and switching weap
 
 | Module | What it does | Cost | Levels |
 | ------ | ------------ | ---- | ------ |
-| Fire-control computer | Fires your weapons by itself when the shot is worth it, switching to whichever owned weapon fits best and away from empty ones (rules below). A **WPN** auto toggle appears next to FIRE/BOOST/PILOT in the sortie (key H). | 500 / 1,200 / 2,800, then x1.5 | No cap. Wait between auto-shots: 3.0 s x 0.8 per level, never under 0.6 s |
+| Fire-control computer | Fires your weapons by itself when the shot is worth it, switching to whichever owned weapon fits best and away from empty ones (rules below). A **WPN** auto toggle appears next to FIRE/BOOST/PILOT in the sortie (key H). | 500 / 1,200 / 2,800, then x1.5 | No cap. Wait between auto-shots: 3.0 s x 0.8 per level, never under 0.6 s. **[CHANGED - Tim, 2026-11-08]** From Lv 9 (where it reaches 0.6 s) every further level adds **+10% damage to all weapon shots** (Lv 10 = +20%, Lv 14 = +60%), so it never stops paying. |
 | Weapon selector | When your weapon runs dry, switches to one that still has ammo, even with the fire-control computer off (for manual firing). Auto-switches don't change your saved equipped weapon. | 350 | One-time |
 | Ammo autoloader | When the weapon is empty (and the selector has nothing loaded to switch to), buys a shot automatically. **Only pays from that sortie's credits, never your wallet.** Each level makes every reload 10% cheaper, manual +1 too. | 400 / 1,000 / 2,400, then x1.5 | No cap (discount compounds: 10%, 19%, 27%...) |
 | Ammo racks | +1 starting ammo on every weapon per level. | 300 / 750 / 1,800, then x1.5 | No cap |
@@ -233,7 +233,7 @@ Tim: "a larger block ... you have to EVA and enter it ... hollow it out from the
 - **[DONE]** **Break the shell:** when the last core cell breaks, the shell turns weak. It gets glowing orange seams, the label changes to **BREAK THE SHELL +jackpot**, and the hatch seals into ordinary shell. Now the ship's laser, weapons and wing can break it, and the shell cells count toward clearing the field. Breaking the last shell cell **cracks the giant** and pays the **jackpot**, with a big burst and +30 XP x field tier.
 - **[DONE]** Auto-advance waits while you have a giant **started but not cracked**, so a field clear can't warp you away halfway through. A giant you never touch doesn't block the clear.
 - **[DONE]** The sortie summary shows **Giant rocks cracked xN (jackpot)**. The Fields screen lists the giant rock as a feature. The Miner upgrades tab explains it.
-- **[DONE]** **New miner upgrade: Wide drill head** (Upgrades > Miner, 300 / 750 / 1,600 / 3,400 cr, then x1.5). The hand drill also cuts the 4 cells next to its target at 25% of its power per level (max 100%). It works on normal blocks too.
+- **[DONE]** **New miner upgrade: Wide drill head** (Upgrades > Miner, 300 / 750 / 1,600 / 3,400 cr, then x1.5). The hand drill also cuts the 4 cells next to its target at 25% of its power per level. It works on normal blocks too. **[CHANGED - Tim, 2026-11-08]** No longer stops at 100%: see *Upgrades past 100%* under Ship weapons & systems.
 - **[DONE]** **Why level the miner now:** core cells get tougher in later fields and with Threat, but the drill doesn't count toward Threat. So **Hand drill**, **Wide drill head**, **Oxygen tank**, **EVA mobility** and miner rank all directly shorten the dig.
 - **Numbers at Threat 1** (all in `DATA.GIANT` in `js/data.js`; the code is in `js/sortie.js` > `placeGiants()`, `giantCellGone()`, `openGiant()`, `crackGiant()`, `drawGiants()`):
 
@@ -287,7 +287,7 @@ Tim: "So as they're getting money and collecting things, they can turn on auto u
 - **[DONE]** While it is on, the hangar checks every second and buys whatever it can afford: after a sortie, after collecting the drone, after the welcome-back payout. Never during a sortie (sortie credits are only banked when you dock anyway). A toast lists what it bought, e.g. "Auto upgrade: Mining laser Lv 3, Heat sink Lv 3 +10 more (-2,400 cr)".
 - **[DONE]** **How it chooses:** each upgrade gets a score = next price x a weight; it buys the lowest score first. Lower weight = favoured: laser and heat sink 1, drone bay 0.9, thrusters/fuel/hull 1.2, ... repair training 2, reinforced suit 2.2. So money spreads over everything, leaning toward what makes runs pay. If the top pick is too dear it saves up for it, but still buys anything costing a quarter of it or less. All weights are in `DATA.AUTO_UPGRADE` (`js/data.js`).
 - **[DONE]** It always keeps enough credits to fully repair the hull.
-- **[DONE]** It levels what you already have: Shuttle, Miner, drone bay, ship weapons & systems (fitting one counts), each escort drone's lasers/heat sinks/engines, owned secondary weapons and owned automation modules. It skips Wide beam, Split beam and Wide drill head once they reach 100% (more levels do nothing).
+- **[DONE]** It levels what you already have: Shuttle, Miner, drone bay, ship weapons & systems (fitting one counts), each escort drone's lasers/heat sinks/engines, owned secondary weapons and owned automation modules. **[CHANGED 2026-11-08]** It no longer skips Wide beam, Split beam and Wide drill head, because they keep improving past 100% now.
 - **[DONE]** Tests: off by default and buys nothing while off; spends across several upgrades and keeps repair money; never buys new drones/weapons/modules but levels owned ones; stops at capped side cuts. `node --test tests/` 32 pass. Checked in Chromium at 360x740 (no errors). Service worker cache bumped to v25.
 - **[NEEDS DECISION]** **New purchases:** it never buys a new escort drone, a new secondary weapon, a new automation module or a drone module (those felt like your choices and are big spends). Should it buy those too?
 - **[NEEDS DECISION]** **Off by default** (spending is not undoable). Turn it on by default for new players instead? And are the weights right (e.g. should it favour the drone bay more for offline gains)?
@@ -300,8 +300,8 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 
 | Upgrade | Prices (fit, Lv 3, Lv 4, Lv 5) | What it does |
 | ------- | ------------------------------ | ------------ |
-| **Wide beam** | 250 / 600 / 1,300 / 2,800 | The ship's version of the Wide drill head. While the laser fires, it also burns the 4 blocks next to its target at 25% of laser power per level (max 100%). Glowing side beams show it. |
-| **Split beam** | 400 / 900 / 1,900 / 4,000 | A second pink beam locks the nearest *other* block in lock range at 25% of laser power per level (max 100%). Only the main beam makes heat. |
+| **Wide beam** | 250 / 600 / 1,300 / 2,800 | The ship's version of the Wide drill head. While the laser fires, it also burns the 4 blocks next to its target at 25% of laser power per level, then the diagonals (see below). Glowing side beams show it. |
+| **Split beam** | 400 / 900 / 1,900 / 4,000 | A second pink beam locks the nearest *other* block in lock range at 25% of laser power per level, then a third beam (see below). Only the main beam makes heat. |
 | **Twin miniguns** | 350 / 800 / 1,700 / 3,600 | 3 dmg/s (+50% per level after the first), x rank power. They fire with FIRE, **never overheat** (they keep going while the laser vents), and shoot scavengers first, then the laser's target, then the nearest block. Range is 90% of lock range. Gun barrels show on the ship. |
 | **Sentry turrets** | 500 / 1,100 / 2,300 / 4,800 | One sentry per level bought. While you mine, the ship drops a sentry where it is (at most one every 3 s, not on top of another). Once all are out, a sentry with nothing in reach jumps to the ship instead. Each one mines or shoots scavengers within 130 units at 2.5 dmg/s (+25% per level after the first) x rank power. **Guard duty:** each sentry also shoots down an incoming asteroid within 200 units every 3 s (x0.9 per level after the first), the one closest to the miner or ship first. On a spacewalk they guard the miner: they deploy beside it, and the farthest one hops over as the miner moves on. |
 | **Point defence** | 300 / 700 / 1,500 / 3,200 | Zaps the nearest debris rock within 125 units of the ship, every 7 s (x0.85 per level after the first). |
@@ -317,6 +317,24 @@ Six new shuttle upgrades in a new **Ship weapons & systems** section under Upgra
 - **[NEEDS DECISION]** **Sentry behaviour:** sentries drop by themselves wherever you mine. Would you rather have a button to place them by hand, or have them follow the ship like the escort wing?
 - **[TODO]** Dedicated sounds for the miniguns and sentries (they reuse the existing hit and click sounds for now).
 - **[TODO]** The hangar ship preview doesn't show the new parts yet; only the in-sortie ship has gun barrels.
+
+
+**Upgrades past 100% (changed 2026-11-08 at Tim's request: "the upgraded things... they're done... those are upgradable too and can be meaningful too")**
+
+- **[DONE]** Wide beam, Split beam and the Wide drill head used to stop doing anything after 4 bought levels (100%), and the fire-control computer stopped at 0.6 s. Now every level counts (`DATA.OVERCAP`, `shareTiers()` in `js/state.js`):
+
+| Levels bought | Wide beam | Split beam | Wide drill head |
+|---|---|---|---|
+| 1-4 | 4 side blocks, 25% a level up to 100% | 2nd beam, 25% a level up to 100% | 4 side cells, 25% a level up to 100% |
+| 5-8 | + the 4 **diagonal** blocks, 25% a level up to 100% | + a **3rd beam** on another block, 25% a level up to 100% | + the 4 **diagonal** cells, 25% a level up to 100% |
+| 9+ | all 8 neighbours +10% a level, no cap (Lv 19 = 200%) | both extra beams +10% a level, no cap | all 8 cells +10% a level, no cap |
+
+- **[DONE]** Fire-control computer: past the 0.6 s floor, +10% damage to every weapon shot per level (also manual shots).
+- **[DONE]** The upgrade screens show the next step (e.g. "4 side blocks at 100% and the 4 diagonals at 50% → 75%"). Auto upgrade now keeps buying these.
+- **[DONE]** Tests: the new stat steps, the fire-control damage bonus, and that the diagonals and third beam really cut blocks in a sortie (51 tests pass). Checked the upgrade screens in Chromium, no errors.
+- Not changed (on purpose, tell me if you want them uncapped too): escort wing max 8 drones, drone-bay storage max 24 h, the one-time modules (weapon selector, dock repair crew). Point defence, deflector and the autoloader keep improving every level, just by smaller steps.
+- **[DONE]** Threat counts the extra damage: diagonals at quarter weight, the third beam like the second. The fire-control damage bonus does not add Threat.
+- **[NEEDS DECISION]** Is +10% a level past the cap the right size?
 
 ### Daily and weekly orders (added 2026-11-07 at Tim's request)
 

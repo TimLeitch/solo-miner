@@ -392,8 +392,13 @@ test('wide drill head cuts neighbouring cells', () => {
   assert.equal(SM.State.stats().drillSplash, 0);
   st.levels.bit = 3;
   assert.equal(SM.State.stats().drillSplash, 0.5);
-  st.levels.bit = 30;
-  assert.equal(SM.State.stats().drillSplash, 1, 'capped at 100%');
+  st.levels.bit = 5;
+  assert.equal(SM.State.stats().drillSplash, 1);
+  assert.equal(SM.State.stats().drillDiag, 0, 'diagonals start once the sides reach 100%');
+  st.levels.bit = 7;
+  assert.equal(SM.State.stats().drillDiag, 0.5);
+  st.levels.bit = 11; // 10 bought: sides and diagonals 100%, then +10% x 2
+  assert.ok(Math.abs(SM.State.stats().drillSplash - 1.2) < 1e-9 && Math.abs(SM.State.stats().drillDiag - 1.2) < 1e-9, 'keeps growing past 100%');
 });
 
 // ---------- ship weapons & systems (DATA.SHIP_GEAR) ----------
@@ -427,9 +432,14 @@ test('ship gear: nothing is fitted at level 1, and fitted gear raises Threat', (
   assert.equal(S2.wideBeam, 0.5); assert.equal(S2.splitBeam, 0.5); assert.equal(S2.sentries, 2);
   assert.ok(S2.gunDps > SM.DATA.SHIP_GEAR.minigun.dps && S2.pdCd < SM.DATA.SHIP_GEAR.pd.cd && S2.deflectCd < SM.DATA.SHIP_GEAR.deflector.recharge);
   assert.ok(SM.State.threat().power > t0, 'weapons count toward Threat');
-  st.levels.wide = 40; st.levels.split = 40;
-  assert.equal(SM.State.stats().wideBeam, 1, 'wide beam capped at 100%');
-  assert.equal(SM.State.stats().splitBeam, 1, 'split beam capped at 100%');
+  st.levels.wide = 5; st.levels.split = 5;
+  assert.equal(SM.State.stats().wideBeam, 1); assert.equal(SM.State.stats().wideDiag, 0);
+  assert.equal(SM.State.stats().splitBeam, 1); assert.equal(SM.State.stats().splitBeam2, 0);
+  st.levels.wide = 7; st.levels.split = 7;
+  assert.equal(SM.State.stats().wideDiag, 0.5, 'then the diagonals'); assert.equal(SM.State.stats().splitBeam2, 0.5, 'then a third beam');
+  st.levels.wide = 19; st.levels.split = 19; // 18 bought: 10 past both tiers
+  assert.ok(Math.abs(SM.State.stats().wideBeam - 2) < 1e-9 && Math.abs(SM.State.stats().wideDiag - 2) < 1e-9, 'no cap on the wide beam');
+  assert.ok(Math.abs(SM.State.stats().splitBeam2 - 2) < 1e-9, 'no cap on the split beam');
   assert.ok(SM.DATA.SHUTTLE.filter(u => u.gear).length === 6);
 });
 
@@ -987,4 +997,33 @@ test('the ship keeps shooting during a spacewalk but stays where it is', () => {
   assert.ok(fired, 'laser or guns fired while the miner was out');
   assert.ok(w.broken > broke0, `ship broke blocks during the spacewalk (${w.broken - broke0})`);
   assert.ok(Math.hypot(w.ship.x - x0, w.ship.y - y0) < 5, 'ship held its position');
+});
+
+test('fire-control computer keeps paying after its delay floor: +10% weapon damage a level', () => {
+  const { SM } = game(3);
+  const st = SM.State.get();
+  st.weapons.owned.missile = 1;
+  const base = SM.State.weaponStats('missile').dmg;
+  const cap = SM.State.fcsCapLevel();
+  assert.equal(cap, 9);
+  st.auto.lv.fcs = cap - 1;
+  assert.equal(SM.State.weaponStats('missile').dmg, base, 'no bonus before the floor');
+  st.auto.lv.fcs = cap;
+  assert.equal(SM.State.fcsDelay(), 0.6);
+  assert.ok(Math.abs(SM.State.weaponStats('missile').dmg - base * 1.1) < 1e-9);
+  st.auto.lv.fcs = cap + 5;
+  assert.ok(Math.abs(SM.State.weaponStats('missile').dmg - base * 1.6) < 1e-9);
+  assert.ok(SM.State.autoCost('fcs') > 0, 'still for sale');
+});
+
+test('wide beam diagonals and the third split beam actually cut blocks', () => {
+  const { st, w, advance } = gearGame(33, { wide: 7, split: 7 });
+  const { b } = aimAtCluster(w);
+  const at = (x, y) => w.grid.get(x * 100000 + y);
+  const diags = [[1, 1], [-1, 1], [1, -1], [-1, -1]].map(([dx, dy]) => at(b.gx + dx, b.gy + dy)).filter(c => c && c.alive && !c.giant);
+  diags.forEach(c => { c.hp = c.maxHp = 1e6; });
+  st.settings.autoFire = true;
+  advance(1);
+  assert.ok(diags.length && diags.every(c => c.hp < c.maxHp), 'diagonals burn');
+  assert.ok(w.splitTarget2 && w.splitTarget2 !== w.splitTarget && w.splitTarget2.hp < w.splitTarget2.maxHp, 'third beam cuts');
 });

@@ -520,12 +520,12 @@ SM.Sortie = (function () {
   }
   function nearestBlock(maxD) { return nearestNear(w.ship.x, w.ship.y, maxD); }
   // nearest block the ship's guns may hurt within maxD of (x, y), skipping `skip` (grid search, cheap)
-  function nearestNear(x, y, maxD, skip) {
+  function nearestNear(x, y, maxD, skip, skip2) {
     let best = null, bd = maxD;
     const r = Math.ceil(maxD / BS), gx = Math.floor(x / BS), gy = Math.floor(y / BS);
     for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
       const b = w.grid.get(key(gx + dx, gy + dy));
-      if (!b || !b.alive || b === skip || !shipCan(b)) continue;
+      if (!b || !b.alive || b === skip || b === skip2 || !shipCan(b)) continue;
       const d = Math.hypot(b.x - x, b.y - y);
       if (d < bd) { bd = d; best = b; }
     }
@@ -784,7 +784,7 @@ SM.Sortie = (function () {
       if (b.hp <= 0) { if (b.foe) killFoe(b); else breakBlock(b); }
       laserExtras(b, dt);
     } else {
-      w.splitTarget = null;
+      w.splitTarget = null; w.splitTarget2 = null;
       w.heat = Math.max(0, w.heat - S.cool * dt * (w.flareOn > 0 ? 0.5 : 1));
       if (w.overheated && w.heat <= S.heat * D.BASE.resumeAt) { w.overheated = false; caption('Laser cooled - mining again', 'good'); }
     }
@@ -1145,7 +1145,7 @@ SM.Sortie = (function () {
       wells: world.wells, mines: world.mines, foes: world.foes, regrow: world.regrow, booms: [],
       flare: next.flares ? next.flares.every * 0.6 : 0, flareOn: 0,
       target: null, apGoal: null, apStuck: 0, proj: [], wingPlan: 0,
-      sentries: [], sentryCd: 1, splitTarget: null, gunTarget: null, derelict: null }); // sentries are left behind; the ship drops new ones
+      sentries: [], sentryCd: 1, splitTarget: null, splitTarget2: null, gunTarget: null, derelict: null }); // sentries are left behind; the ship drops new ones
     w.events.forEach(e => { if (!e.done) e.gone = true; }); // an unfinished event stays in the old field
     w.event = rollEvent(next, false);
     const s = w.ship;
@@ -1433,6 +1433,10 @@ SM.Sortie = (function () {
           const nb = w.grid.get(key(t.gx + dx, t.gy + dy));
           if (nb && nb.alive && drillCan(nb)) hurtBlock(nb, S.drillDps * S.drillSplash * M[nb.mat].res * dt, true, true);
         });
+        if (S.drillDiag > 0) [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([dx, dy]) => { // past 100%: diagonals too
+          const nb = w.grid.get(key(t.gx + dx, t.gy + dy));
+          if (nb && nb.alive && drillCan(nb)) hurtBlock(nb, S.drillDps * S.drillDiag * M[nb.mat].res * dt, true, true);
+        });
         if (Math.random() < 0.3 && !settings().reducedFx) w.particles.push({ x: t.x + rand(-5, 5), y: t.y + rand(-5, 5), vx: rand(-50, 50), vy: rand(-50, 50), t: 0, life: 0.3, color: '#ffd76a', size: 2 });
         if (!t.alive) m.target = null;
       }
@@ -1467,7 +1471,7 @@ SM.Sortie = (function () {
       if (G.started) { if (w.time < 8) continue; }
       else {
         let hp = 0; G.cells.forEach(c => { if (c.alive && c.part === 'core') hp += c.hp; });
-        const secs = G.digEst = hp / Math.max(0.1, S.drillDps * (1 + 2 * (S.drillSplash || 0))) * 1.6; // x1.6 for oxygen refills
+        const secs = G.digEst = hp / Math.max(0.1, S.drillDps * (1 + 2 * (S.drillSplash || 0) + (S.drillDiag || 0))) * 1.6; // x1.6 for oxygen refills
         if (secs > w.time - 10) continue;
       }
       const d = Math.hypot(G.hx - s.x, G.hy - s.y);
@@ -1815,12 +1819,22 @@ SM.Sortie = (function () {
         const nb = w.grid.get(key(b.gx + dx, b.gy + dy));
         if (nb && nb.alive && shipCan(nb)) hurtBlock(nb, S.dps * S.wideBeam * dt, true);
       }
+      if (S.wideDiag > 0) for (const [dx, dy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { // past 100%: the diagonals too
+        if (!w) return;
+        const nb = w.grid.get(key(b.gx + dx, b.gy + dy));
+        if (nb && nb.alive && shipCan(nb)) hurtBlock(nb, S.dps * S.wideDiag * dt, true);
+      }
     }
     if (!w) return;
     if (S.splitBeam > 0) { // a second beam on the nearest other block in lock range (no extra heat)
       let t = w.splitTarget;
       if (!t || !t.alive || t === b || Math.hypot(t.x - s.x, t.y - s.y) > S.range) t = w.splitTarget = nearestNear(s.x, s.y, S.range, b);
       if (t) hurtBlock(t, S.dps * S.splitBeam * dt, true);
+      if (w && S.splitBeam2 > 0) { // past 100%: a third beam on yet another block
+        let t2 = w.splitTarget2;
+        if (!t2 || !t2.alive || t2 === b || t2 === w.splitTarget || Math.hypot(t2.x - s.x, t2.y - s.y) > S.range) t2 = w.splitTarget2 = nearestNear(s.x, s.y, S.range, b, w.splitTarget);
+        if (t2) hurtBlock(t2, S.dps * S.splitBeam2 * dt, true);
+      }
     }
   }
   function zapDebris(i, x, y, color) {
@@ -1920,13 +1934,14 @@ SM.Sortie = (function () {
   function drawShipGear() {
     const s = w.ship, S = w.S;
     // split beam
-    if (w.firing && w.splitTarget && w.splitTarget.alive) {
-      const t = w.splitTarget, ex = s.x + Math.cos(s.a) * 10, ey = s.y + Math.sin(s.a) * 10;
+    if (w.firing) [w.splitTarget, S.splitBeam2 > 0 ? w.splitTarget2 : null].forEach(t => {
+      if (!t || !t.alive) return;
+      const ex = s.x + Math.cos(s.a) * 10, ey = s.y + Math.sin(s.a) * 10;
       g.strokeStyle = 'rgba(255,107,214,0.35)'; g.lineWidth = 5;
       g.beginPath(); g.moveTo(ex, ey); g.lineTo(t.x, t.y); g.stroke();
       g.strokeStyle = '#ffd1f2'; g.lineWidth = 1.5;
       g.beginPath(); g.moveTo(ex, ey); g.lineTo(t.x + rand(-2, 2), t.y + rand(-2, 2)); g.stroke();
-    }
+    });
     // wide beam glow on the neighbours
     if (w.firing && S.wideBeam > 0 && w.target && !w.target.foe) {
       const b = w.target;

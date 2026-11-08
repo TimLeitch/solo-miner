@@ -163,8 +163,8 @@ SM.DATA = (function () {
   //   pd         zaps the nearest debris rock within `range` of the ship, every cd x shrink^(L-2) seconds
   //   deflector  absorbs one debris or mine hit, recharges in recharge x shrink^(L-2) seconds (works with drone shields)
   const SHIP_GEAR = {
-    wide:      { max: 1 },
-    split:     { max: 1 },
+    wide:      {},  // share per level is `per` in SHUTTLE; past 100% see OVERCAP
+    split:     {},
     minigun:   { dps: 3, perLevel: 0.5, range: 0.9, rate: 0.09 },
     sentry:    { dps: 2.5, perLevel: 0.25, range: 130, dropEvery: 3, flakRange: 200, flakCd: 3, flakShrink: 0.9 },
     pd:        { range: 125, cd: 7, shrink: 0.85 },
@@ -314,6 +314,7 @@ SM.DATA = (function () {
   //   racks    Lv n: +(n-1) starting ammo on every weapon (Lv 1 = not bought)
   const AUTO = {
     fcsDelay: 3, fcsStep: 0.8, fcsMin: 0.6,
+    fcsOver: 0.1, // once the delay hits fcsMin, every further level adds +10% damage to all weapon shots (added 2026-11-08, Tim)
     loaderStep: 0.9,
     modules: [
       { id: 'fcs', name: 'Fire-control computer', icon: '⌖', costs: [500, 1200, 2800], max: null, toggle: true,
@@ -430,6 +431,11 @@ SM.DATA = (function () {
   // No level caps. Each table above lists the first prices; after the table runs out,
   // every further level costs UPGRADE_GROWTH x the previous one (rounded to a tidy number).
   const UPGRADE_GROWTH = 1.5;
+  // Share upgrades that used to stop at 100% (Wide beam, Split beam, Wide drill head; changed 2026-11-08 at Tim's request):
+  //   tier 1 (the 4 side blocks / a 2nd beam) climbs `per` a level to 100%, then
+  //   tier 2 (the 4 diagonal blocks / a 3rd beam) climbs `per` a level to 100%, then
+  //   every further level adds OVERCAP (+10%) to both tiers, with no cap.
+  const OVERCAP = 0.1;
 
   // Threat: fields scale with your power so they stay a challenge as you upgrade.
   //   power  = laser multiplier + 0.5 x (escort drone laser power / ship base laser) + 0.1 x weapon levels
@@ -486,5 +492,5 @@ SM.DATA = (function () {
     ],
   };
 
-  return { SILO, COSMETICS, EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
+  return { SILO, COSMETICS, EVENTS, ACHIEVEMENTS, STARS_BY_RUNG, PRESTIGE, ORDERS, MATERIALS, REGIONS, features, SHUTTLE, SHIP_GEAR, MINER, DRONE, BASE, RANKS, RANK_POWER, PAINTS, WEAPONS, WEAPON_LEVEL, SALVAGE_PER_SHOT, WING, EVA, UPGRADE_GROWTH, OVERCAP, THREAT, AUTO, AUTO_UPGRADE, CLEAR, GIANT, giantCount };
 })();

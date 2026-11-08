@@ -394,8 +394,10 @@ SM.UI = (function () {
       const per = id => D.SHUTTLE.find(u => u.id === id).per;
       const grow = (l, k) => (1 + k * (l - 2)) * rp;
       const gearEff = {
-        wide: l => l < 2 ? 'Not fitted' : `Laser also burns the 4 blocks around its target at ${Math.round(Math.min(1, per('wide') * (l - 1)) * 100)}% power`,
-        split: l => l < 2 ? 'Not fitted' : `Second beam on the next-nearest block at ${Math.round(Math.min(1, per('split') * (l - 1)) * 100)}% power (no extra heat)`,
+        wide: l => { if (l < 2) return 'Not fitted'; const [a, b] = St.shareTiers(per('wide'), l - 1);
+          return `Laser also burns the 4 side blocks at ${Math.round(a * 100)}%` + (b > 0 ? ` and the 4 diagonals at ${Math.round(b * 100)}%` : '') + ' power'; },
+        split: l => { if (l < 2) return 'Not fitted'; const [a, b] = St.shareTiers(per('split'), l - 1);
+          return `Second beam at ${Math.round(a * 100)}%` + (b > 0 ? `, third beam at ${Math.round(b * 100)}%` : '') + ' power on the next-nearest blocks (no extra heat)'; },
         minigun: l => l < 2 ? 'Not fitted' : `${(G.minigun.dps * grow(l, G.minigun.perLevel)).toFixed(1)} dmg/s, never overheats, hits scavengers first`,
         sentry: l => l < 2 ? 'Not fitted' : `${l - 1} sentr${l === 2 ? 'y' : 'ies'} at ${(G.sentry.dps * grow(l, G.sentry.perLevel)).toFixed(1)} dmg/s each, dropped where you mine. Each shoots down an asteroid every ${(G.sentry.flakCd * Math.pow(G.sentry.flakShrink, l - 2)).toFixed(1)}s and guards the miner on a spacewalk`,
         pd: l => l < 2 ? 'Not fitted' : `Zaps a nearby debris rock every ${(G.pd.cd * Math.pow(G.pd.shrink, l - 2)).toFixed(1)}s`,
@@ -419,7 +421,8 @@ SM.UI = (function () {
         eva: l => `Speed ${Math.round(D.EVA.speed * (1 + 0.15 * (l - 1)))}`,
         o2: l => `Oxygen ${Math.round(D.EVA.o2 * (1 + 0.25 * (l - 1)))}s`,
         drill: l => `Drill ${(D.EVA.drillDps * (1 + 0.30 * (l - 1)) * (1 + D.RANK_POWER * (St.rank() - 1))).toFixed(1)} dmg/s (ignores resistance)`,
-        bit: l => `Also cuts the 4 cells around the target at ${Math.round(Math.min(1, D.MINER.find(x => x.id === 'bit').per * (l - 1)) * 100)}% power`,
+        bit: l => { const [a, b] = St.shareTiers(D.MINER.find(x => x.id === 'bit').per, l - 1);
+          return `Also cuts the 4 side cells at ${Math.round(a * 100)}%` + (b > 0 ? ` and the 4 diagonals at ${Math.round(b * 100)}%` : '') + ' power'; },
       };
       ['eva', 'o2', 'drill', 'bit'].forEach(id => {
         const u = D.MINER.find(x => x.id === id), l = St.lvl(id);
@@ -543,7 +546,11 @@ SM.UI = (function () {
   // ---------- ship automation (Upgrades > Weapons) ----------
   function autoEffect(id, l) {
     const A = D.AUTO, nx = l + 1;
-    if (id === 'fcs') return l ? `Auto-shot every ${St.fcsDelay(l).toFixed(1)}s at most` + (St.fcsDelay(nx) < St.fcsDelay(l) ? ` &rarr; <b>${St.fcsDelay(nx).toFixed(1)}s</b>` : '') : `Fires at most every ${A.fcsDelay.toFixed(1)}s`;
+    if (id === 'fcs') {
+      if (!l) return `Fires at most every ${A.fcsDelay.toFixed(1)}s`;
+      const dmg = k => St.fcsBonus(k) > 1 ? `, weapon damage +${Math.round((St.fcsBonus(k) - 1) * 100)}%` : '';
+      return `Auto-shot every ${St.fcsDelay(l).toFixed(1)}s${dmg(l)} &rarr; <b>${St.fcsDelay(nx).toFixed(1)}s${dmg(nx) || ''}</b>`;
+    }
     if (id === 'loader') return l ? `Reloads ${Math.round((1 - Math.pow(A.loaderStep, l - 1)) * 100)}% cheaper &rarr; <b>${Math.round((1 - Math.pow(A.loaderStep, l)) * 100)}%</b>` : 'Auto-buys from sortie credits only';
     if (id === 'racks') return `Extra ammo per weapon: +${l}` + ` &rarr; <b>+${nx}</b>`;
     return '';
