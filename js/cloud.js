@@ -23,7 +23,7 @@ SM.Cloud = (function () {
   const PULL_EVERY_MS = 5 * 60 * 1000; // check for progress from other devices this often
   const cfg = SM.CLOUD_CONFIG || {};
   const $ = id => document.getElementById(id);
-  const fmt = n => Math.floor(n || 0).toLocaleString();
+  const fmt = n => SM.fmt(n || 0);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   let auth = null;          // { uid, email, idToken, refreshToken, expiresAt }

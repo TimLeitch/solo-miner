@@ -1049,3 +1049,10 @@ test('auto upgrade list: items can be switched off or put first, and the buyer o
   SM.State.toggleAutoUpgradeGroup('laser', 'skip');
   assert.ok(SM.State.autoUpgradeOptions().some(o => o.group === 'laser'));
 });
+
+test('money shows in a short form that fits on screen', () => {
+  const { SM } = game(1);
+  const cases = [[950, '950'], [9999, '9,999'], [12345, '12.3K'], [999999, '999K'], [1234567, '1.23M'], [45.6e9, '45.6B'], [7.89e12, '7.89T'], [1.2e15, '1.2Qa'], [1.23e21, '1.23e21'], [-15000, '-15K']];
+  cases.forEach(([n, s]) => assert.equal(SM.fmt(n), s, `${n}`));
+  assert.ok(Array.from({ length: 40 }, (_, i) => SM.fmt(Math.pow(10, i / 2) * 7.77)).every(s => s.length <= 7), 'never longer than 7 characters');
+});

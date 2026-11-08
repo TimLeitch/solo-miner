@@ -872,7 +872,7 @@ SM.Sortie = (function () {
       const a = rand(0, Math.PI * 2), sp = rand(50, 190);
       w.particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.4, 0.8), color: i % 2 ? M.scav.color : '#ffd76a', size: rand(2, 4) });
     }
-    w.pops.push({ x: f.x, y: f.y - 8, text: '+' + f.value + (f.kind ? '' : ' bounty'), t: 0, color: '#ffd76a', size: f.kind ? 22 : 16 });
+    w.pops.push({ x: f.x, y: f.y - 8, text: '+' + SM.fmt(f.value) + (f.kind ? '' : ' bounty'), t: 0, color: '#ffd76a', size: f.kind ? 22 : 16 });
     if (w.target === f) w.target = null;
   }
   function disarmMine(m) {
@@ -1146,7 +1146,7 @@ SM.Sortie = (function () {
     w.clearBonus += bonus; w.xp += D.CLEAR.xp * (D.REGIONS.indexOf(w.region) + 1);
     w.time += D.CLEAR.time; if (w.time >= 30) w.warned.time = 0;
     w.fuel = Math.min(w.S.fuel, w.fuel + w.S.fuel * D.CLEAR.fuel);
-    w.pops.push({ x: w.ship.x, y: w.ship.y - 30, text: `FIELD CLEARED +${bonus.toLocaleString()}`, t: 0, color: '#57e39a', size: 20 });
+    w.pops.push({ x: w.ship.x, y: w.ship.y - 30, text: `FIELD CLEARED +${SM.fmt(bonus)}`, t: 0, color: '#57e39a', size: 20 });
     w.fieldCr = 0;
     const world = generate(next, false);
     Object.assign(w, { region: next, blocks: world.blocks, grid: world.grid, debris: world.debris, fields: world.fields,
@@ -1164,7 +1164,7 @@ SM.Sortie = (function () {
     const st = SM.State.get();
     if (st.region !== next.id) { st.region = next.id; SM.State.save(); }
     $('regionLabel').textContent = `${next.name} - Threat ${TH.level.toFixed(1)}`;
-    caption(`Field cleared! +${bonus.toLocaleString()} cr bonus, +${D.CLEAR.time}s`, 'good');
+    caption(`Field cleared! +${SM.fmt(bonus)} cr bonus, +${D.CLEAR.time}s`, 'good');
     caption(same ? `Warping to a fresh ${next.name} field` : `Advancing to ${next.name}`, 'good');
     SM.Audio.contract();
     vibrate([40, 40, 120]);
@@ -1319,8 +1319,8 @@ SM.Sortie = (function () {
     r.alive = false; w.relicCount++; w.relicCredits += r.value; w.credits += r.value; w.xp += 10;
     if (r.crate) { r.ev.credits += r.value; label = 'Salvage crate'; }
     SM.Audio.contract(); vibrate(50);
-    w.pops.push({ x: r.x, y: r.y - 8, text: '+' + r.value + ' relic', t: 0, color: '#f2c14e', size: 16 });
-    caption(`${label} +${r.value} cr`, 'good');
+    w.pops.push({ x: r.x, y: r.y - 8, text: '+' + SM.fmt(r.value) + ' relic', t: 0, color: '#f2c14e', size: 16 });
+    caption(`${label} +${SM.fmt(r.value)} cr`, 'good');
   }
   // drone weapon + gear behaviour
   function droneModules(d, dt) {
@@ -1726,7 +1726,7 @@ SM.Sortie = (function () {
     const id = w.weapon, def = SM.State.weaponDef(id), st = SM.State.get();
     if (!needsAmmo(id)) { caption(def.name + ' is fully loaded'); return; }
     const cost = SM.State.reloadCost(id);
-    if (w.credits + st.credits < cost) { SM.Audio.deny(); caption(`Need ${cost} cr to reload`, 'warn'); return; }
+    if (w.credits + st.credits < cost) { SM.Audio.deny(); caption(`Need ${SM.fmt(cost)} cr to reload`, 'warn'); return; }
     purchaseShot(id, cost, false);
   }
   // runOnly: the autoloader never touches the wallet, only credits mined this sortie.
@@ -1739,7 +1739,7 @@ SM.Sortie = (function () {
     if (fromWallet) SM.State.save();
     w.ammo[id]++;
     SM.Audio.buy();
-    caption(`${runOnly ? 'Autoloader bought' : 'Bought'} 1 ${def.name} shot -${cost} cr`);
+    caption(`${runOnly ? 'Autoloader bought' : 'Bought'} 1 ${def.name} shot -${SM.fmt(cost)} cr`);
     hud();
     return true;
   }
@@ -2066,7 +2066,7 @@ SM.Sortie = (function () {
       const a = rand(0, Math.PI * 2), sp = rand(40, m.value >= 50 ? 200 : 130);
       w.particles.push({ x: b.x, y: b.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: rand(0.4, 0.8), color: i % 3 ? m.color : '#fff', size: rand(2, 4.5) });
     }
-    w.pops.push({ x: b.x, y: b.y - 6, text: '+' + b.value, t: 0, color: '#ffd76a', size: m.value >= 50 ? 18 : 14 });
+    w.pops.push({ x: b.x, y: b.y - 6, text: '+' + SM.fmt(b.value), t: 0, color: '#ffd76a', size: m.value >= 50 ? 18 : 14 });
     if (w.target === b) {
       w.target = settings().aimAssist ? autoTarget(w.S.range) : null;
     }
@@ -2098,8 +2098,8 @@ SM.Sortie = (function () {
     G.cracked = true;
     const pay = G.jackpot, xp = D.GIANT.xp * (G.tier + 1);
     w.credits += pay; w.fieldCr += pay; w.giantsCracked++; w.giantCr += pay; w.xp += xp;
-    w.pops.push({ x: G.x, y: G.y, text: `GIANT CRACKED +${pay.toLocaleString()}`, t: 0, color: '#ffd76a', size: 22 });
-    caption(`Giant rock cracked! +${pay.toLocaleString()} cr jackpot, +${xp} XP`, 'good');
+    w.pops.push({ x: G.x, y: G.y, text: `GIANT CRACKED +${SM.fmt(pay)}`, t: 0, color: '#ffd76a', size: 22 });
+    caption(`Giant rock cracked! +${SM.fmt(pay)} cr jackpot, +${xp} XP`, 'good');
     SM.Audio.boom(); SM.Audio.contract(); vibrate([60, 40, 140]);
     if (settings().shake) w.shake = Math.max(w.shake, 10);
     const n = settings().reducedFx ? 16 : 70;
@@ -2139,7 +2139,7 @@ SM.Sortie = (function () {
         g.strokeText('EVA IN', tx, ty); g.fillStyle = '#ffd76a'; g.fillText('EVA IN', tx, ty);
       }
       // label
-      const label = G.open ? `BREAK THE SHELL  +${G.jackpot.toLocaleString()}` : `GIANT ROCK  hollowed ${G.core - G.coreLeft}/${G.core}`;
+      const label = G.open ? `BREAK THE SHELL  +${SM.fmt(G.jackpot)}` : `GIANT ROCK  hollowed ${G.core - G.coreLeft}/${G.core}`;
       g.font = '800 12px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.75)'; g.strokeText(label, G.x, y0 - 16);
       g.fillStyle = G.open ? '#ffb35c' : '#e8d6bf'; g.fillText(label, G.x, y0 - 16);
@@ -2592,7 +2592,7 @@ SM.Sortie = (function () {
     bar('barEnergy', w.energy / S.energy, false);
     bar('barHeat', w.heat / S.heat, w.overheated);
     bar('barO2', w.o2 / S.evaO2, w.eva && w.o2 < 8);
-    $('hudCredits').textContent = w.credits.toLocaleString();
+    $('hudCredits').textContent = SM.fmt(w.credits);
     const t = Math.max(0, Math.ceil(w.time));
     $('hudTime').textContent = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
     $('hudTime').classList.toggle('warn', t <= 30);
@@ -2601,7 +2601,7 @@ SM.Sortie = (function () {
       const m = M[w.target.mat];
       ti.hidden = false;
       $('tName').textContent = w.target.kind ? D.EVENTS.kinds[w.target.kind].name : m.name;
-      $('tValue').textContent = w.target.value + ' cr';
+      $('tValue').textContent = SM.fmt(w.target.value) + ' cr';
       $('tHp').style.width = (w.target.hp / w.target.maxHp * 100) + '%';
       const dist = Math.hypot(w.target.x - w.ship.x, w.target.y - w.ship.y);
       const secs = w.target.hp * m.res / S.dps;
@@ -2617,7 +2617,7 @@ SM.Sortie = (function () {
       const full = !needsAmmo(w.weapon);
       $('wpnWrap').style.setProperty('--salv', (Math.min(1, w.salvage / D.SALVAGE_PER_SHOT) * 360) + 'deg');
       const rc = SM.State.reloadCost(w.weapon);
-      $('btnReload').innerHTML = full ? 'FULL' : `+1<small>${rc}cr</small>`;
+      $('btnReload').innerHTML = full ? 'FULL' : `+1<small>${SM.fmt(rc)}cr</small>`;
       $('btnReload').classList.toggle('off', full || w.credits + SM.State.get().credits < rc);
       $('btnReload').setAttribute('aria-label', full ? 'Weapon full' : `Buy 1 shot for ${rc} credits`);
     }

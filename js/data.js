@@ -3,6 +3,25 @@
  * expected to change after playtesting. */
 window.SM = window.SM || {};
 
+// Money (and other big numbers) in a short form that fits on a phone screen (added 2026-11-08 at Tim's request):
+// under 10,000 as is (9,999); then 3 significant digits with a suffix: 12.3K, 456K, 1.23M, 45.6B, 7.89T, 1.2Qa, 3.4Qi;
+// past that 1.23e21. Rounds down, so it never shows more than you have.
+SM.fmt = function (n) {
+  n = Math.floor(Number(n) || 0);
+  const neg = n < 0; if (neg) n = -n;
+  let out;
+  if (n < 10000) out = n.toLocaleString('en-US');
+  else {
+    const units = ['K', 'M', 'B', 'T', 'Qa', 'Qi'], k = Math.floor(Math.log10(n) / 3);
+    if (k > units.length) out = n.toExponential(2).replace('+', '');
+    else {
+      const v = n / Math.pow(1000, k), d = v >= 100 ? 0 : v >= 10 ? 1 : 2, p = Math.pow(10, d);
+      out = (Math.floor(v * p + 1e-9) / p).toFixed(d).replace(/\.?0+$/, '') + units[k - 1];
+    }
+  }
+  return (neg ? '-' : '') + out;
+};
+
 SM.DATA = (function () {
   // Materials. glyph = shape drawn on the block so type never relies on colour alone.
   const MATERIALS = {

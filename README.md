@@ -510,6 +510,12 @@ Players can make an account (email + password), sign in on any phone or computer
 - [DONE] Accounts and cloud save / sync between devices (live on Firebase project `solo-miner-2daec` since 2026-11-06).
 - [TODO] Analytics for the playtest metrics listed at the bottom of this doc.
 
+### Short money format (added 2026-11-08 at Tim's request: "make the money use easy to read format so you can see it all on screen")
+
+- **[DONE]** Every credit amount (wallet, sortie HUD, prices, payouts, pop-ups, captions, cloud save cards) goes through one formatter, `SM.fmt()` in `js/data.js`: under 10,000 as is (9,999), then 3 significant digits with a suffix: 12.3K, 456K, 1.23M, 45.6B, 7.89T, 1.2Qa, 3.4Qi, and past that 1.23e21. Never longer than 7 characters; rounds down so it never shows more than you have.
+- **[DONE]** Tested (53 tests pass) and checked in Chromium at phone size with 1.23B in the wallet and 98.7M in the sortie HUD.
+- Order/achievement goals (e.g. "Break 10,000 blocks") still use full numbers.
+
 ### Questions for you (please answer inline or in the project chat)
 
 1. ~~**Hosting:**~~ Answered: GitHub Pages (see How to run). Remaining step for you: enable Pages and decide public repo vs paid plan.

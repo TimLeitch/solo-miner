@@ -5,7 +5,7 @@ SM.UI = (function () {
   const D = SM.DATA, St = SM.State;
   const $ = id => document.getElementById(id);
   let screen = 'home', seg = 'shuttle';
-  const fmt = n => Math.floor(n).toLocaleString();
+  const fmt = n => SM.fmt(n);
 
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -465,7 +465,7 @@ SM.UI = (function () {
         const can = cost != null && St.get().credits >= cost;
         const eq = wp.equipped === d.id;
         const chips = [`Damage ${Math.round(st.dmg)}${nx ? ` &rarr; <b>${Math.round(nx.dmg)}</b>` : ''}`,
-          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`, `Reload ${St.reloadCost(d.id)} cr/shot`]
+          d.radius ? `Blast ${d.radius}` : `Length ${d.range}`, `Ammo ${st.ammo}${nx ? ` &rarr; <b>${nx.ammo}</b>` : ''}`, `Reload ${fmt(St.reloadCost(d.id))} cr/shot`]
           .map(c => `<span class="chip">${c}</span>`).join('');
         html += `<div class="card wcard ${eq ? 'region sel' : ''}">
           <div class="row" style="justify-content:flex-start"><div class="wicon" style="color:${d.color}">${d.icon}</div>
